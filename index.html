@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Spline+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root{
   --paper:#F5F3EC; --card:#FFFFFF; --ink:#182420; --ink2:#646F68; --ink3:#9AA39C;
@@ -228,6 +231,9 @@ body.locked{overflow:hidden}
 .onboard .btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
 .btn-gold{background:var(--gold);color:var(--green-ink)}
 .btn-outline-l{border:1px solid rgba(233,240,234,.3);color:#E9F0E9}
+.livewrap{display:flex;align-items:center;gap:8px;font:500 11px var(--mono);color:var(--ink2)}
+.livewrap i{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 #printArea{display:none}
 @media print{
   body.printing #app,body.printing #modalRoot,body.printing #toastRoot{display:none!important}
@@ -258,11 +264,38 @@ body.locked{overflow:hidden}
 
 <script>
 'use strict';
-/* ============================================================
-   SECURITY — EDIT BEFORE DEPLOYING
-   SETUP_CODE unlocks the one-time owner setup at yoursite.com/#/setup
-   Change it to your own secret, e.g. 'BLUE-TIGER-7482'
-   ============================================================ */
+/* ================================================================
+   // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBFuvEGEhc7vC2j6XgH9bb6PnR-NjIfwDo",
+  authDomain: "munshi-91aa9.firebaseapp.com",
+  projectId: "munshi-91aa9",
+  storageBucket: "munshi-91aa9.firebasestorage.app",
+  messagingSenderId: "369936746338",
+  appId: "1:369936746338:web:85e719b3dab31d94074e3b",
+  measurementId: "G-ZS64VSKCJQ"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+   ================================================================ */
+const FIREBASE_CONFIG={
+  apiKey:"PASTE-YOURS",
+  authDomain:"PASTE-YOURS",
+  projectId:"PASTE-YOURS",
+  storageBucket:"PASTE-YOURS",
+  messagingSenderId:"PASTE-YOURS",
+  appId:"PASTE-YOURS"
+};
+/* STEP 2 — secret key that unlocks the one-time owner setup at yoursite/#/setup */
 const SETUP_CODE='HARVINDER-BHATIA-1505';
 
 /* ============ utils ============ */
@@ -270,7 +303,7 @@ const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.quer
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const sum=(a,f)=>a.reduce((x,y)=>x+(+f(y)||0),0);
-const S={report:{},draftOrder:null,usersTab:'team',joinInvite:null,setupOK:false};
+const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[]};
 function groupBy(a,f){const m={};a.forEach(x=>{const k=f(x);(m[k]=m[k]||[]).push(x)});return m}
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -279,10 +312,7 @@ function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');ret
 function timeAgo(ts){const s=(Date.now()-ts)/1000;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 function normMobile(v){let d=String(v||'').replace(/\D/g,'');if(d.length>10&&d.startsWith('91'))d=d.slice(-10);if(d.length===11&&d.startsWith('0'))d=d.slice(1);return d}
 const validMobile=d=>/^\d{10}$/.test(d);
-let _SET=null;
-function SET(){if(_SET)return _SET;_SET=Object.assign({businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:'',counters:{SI:0,PI:0,SR:0,PR:0,ORD:0},seeded:false,welcomed:false},LS.get('settings',{}));_SET.counters=_SET.counters||{SI:0,PI:0,SR:0,PR:0,ORD:0};return _SET}
-function saveSet(s){_SET=s;LS.set('settings',s)}
-function money(n){n=+n||0;const neg=n<-0.004,cur=SET().currency||'₹',loc=(cur==='₹'||/^Rs/.test(cur))?'en-IN':'en-US';return (neg?'-':'')+cur+Math.abs(n).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2})}
+const money=n=>{n=+n||0;const neg=n<-0.004,cur=SET().currency||'₹',loc=(cur==='₹'||/^Rs/.test(cur))?'en-IN':'en-US';return (neg?'-':'')+cur+Math.abs(n).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2})};
 function compact(n){n=Math.abs(+n||0);const cur=SET().currency||'₹';if(n>=1e7)return cur+(n/1e7).toFixed(1)+'Cr';if(n>=1e5)return cur+(n/1e5).toFixed(1)+'L';if(n>=1e3)return cur+(n/1e3).toFixed(1)+'k';return cur+Math.round(n)}
 function numWords(n){n=Math.round(+n||0);const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'],b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
  const two=t=>t<20?a[t]:b[Math.floor(t/10)]+(t%10?' '+a[t%10]:'');
@@ -290,8 +320,6 @@ function numWords(n){n=Math.round(+n||0);const a=['','One','Two','Three','Four',
  if(!n)return 'Zero';let s='',cr=Math.floor(n/1e7);n%=1e7;const lk=Math.floor(n/1e5);n%=1e5;const th=Math.floor(n/1e3);n%=1e3;
  if(cr)s+=three(cr)+' Crore ';if(lk)s+=three(lk)+' Lakh ';if(th)s+=three(th)+' Thousand ';if(n)s+=three(n);
  return s.trim()+' Only'}
-async function hashPw(pw){const s='munshi::'+pw;try{if(crypto&&crypto.subtle){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}}catch(e){}
- let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return 'f'+h.toString(16)}
 function genInviteCode(){const AB='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';try{const r=new Uint32Array(6);crypto.getRandomValues(r);for(let i=0;i<6;i++)s+=AB[r[i]%AB.length]}catch(e){for(let i=0;i<6;i++)s+=AB[Math.floor(Math.random()*AB.length)]}return 'MST-'+s}
 function inviteState(v){if(v.used)return['used','Used'];if(v.days&&Date.now()>v.createdTs+v.days*864e5)return['expired','Expired'];return['open','Open']}
 function copyText(t){const fb=()=>{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('Copied')}catch(e){toast('Copy failed — write it down','err')}ta.remove()};
@@ -299,24 +327,49 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
-/* ============ data layer ============ */
+/* ============ firebase data layer ============ */
+let auth=null,DB=null;
+const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],settings:null,counters:null,myParty:null};
+const COLLECTION_KEYS=['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites'];
 const LS={get(k,d){try{const v=localStorage.getItem('munshi_'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){localStorage.setItem('munshi_'+k,JSON.stringify(v))},del(k){localStorage.removeItem('munshi_'+k)}};
-const ALLKEYS=['settings','users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites'];
-const USERS=()=>LS.get('users',[]),PARTIES=()=>LS.get('parties',[]),CATS=()=>LS.get('categories',[]),BRANDS=()=>LS.get('brands',[]),ITEMS=()=>LS.get('items',[]);
-const SALES=()=>LS.get('sales',[]),PURCHASES=()=>LS.get('purchases',[]),SRET=()=>LS.get('saleReturns',[]),PRET=()=>LS.get('purchaseReturns',[]),RECEIPTS=()=>LS.get('receipts',[]),PAYMENTS=()=>LS.get('payments',[]);
-const ORDERS=()=>LS.get('orders',[]),ADJ=()=>LS.get('stockAdj',[]),RESETS=()=>LS.get('pwResets',[]),INVITES=()=>LS.get('invites',[]);
-function dbAdd(c,o){const a=LS.get(c,[]);o.id=o.id||uid();o.created=o.created||Date.now();a.push(o);LS.set(c,a);return o}
-function dbUpdate(c,id,p){const a=LS.get(c,[]);const i=a.findIndex(x=>x.id===id);if(i>-1){const o=a[i];p.created=o.created;delete p.id;a[i]=Object.assign({},o,p);LS.set(c,a)}}
-function dbDel(c,id){LS.set(c,LS.get(c,[]).filter(x=>x.id!==id))}
-function dbGet(c,id){return LS.get(c,[]).find(x=>x.id===id)}
-const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>PARTIES().find(p=>p.id===id),catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
-function nextNo(pre){const s=SET();s.counters[pre]=(s.counters[pre]||0)+1;saveSet(s);return pre+'-'+String(s.counters[pre]).padStart(4,'0')}
-function session(){const s=LS.get('session',null);if(!s)return null;return USERS().find(u=>u.id===s.userId&&u.active!==false)||null}
-function setSession(u){LS.set('session',{userId:u.id})}
-function logout(){LS.del('session');S.joinInvite=null;go('login')}
+const USERS=()=>state.users,PARTIES=()=>state.parties,CATS=()=>state.categories,BRANDS=()=>state.brands,ITEMS=()=>state.items;
+const SALES=()=>state.sales,PURCHASES=()=>state.purchases,SRET=()=>state.saleReturns,PRET=()=>state.purchaseReturns,RECEIPTS=()=>state.receipts,PAYMENTS=()=>state.payments;
+const ORDERS=()=>state.orders,ADJ=()=>state.stockAdj,RESETS=()=>state.pwResets,INVITES=()=>state.invites;
+function dbAdd(c,o){const id=c==='invites'?o.code:(o.id||uid());const doc=Object.assign({},o,{id});DB.collection(c).doc(id).set(doc).catch(e=>{console.error('save',c,e);toast('Save failed: '+e.code,'err')});return doc}
+function dbUpdate(c,id,p){const d=Object.assign({},p);delete d.id;DB.collection(c).doc(id).set(d,{merge:true}).catch(e=>{console.error('update',c,e);toast('Update failed: '+e.code,'err')})}
+function dbDel(c,id){DB.collection(c).doc(id).delete().catch(e=>{console.error('del',c,e);toast('Delete failed: '+e.code,'err')})}
+function dbGet(c,id){return state[c]?.find(x=>x.id===id)}
+const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
+function SET(){const base={businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:''};const cfg=state.settings||{};const c=Object.assign({},base,cfg);c.counters=state.counters||{};return c}
+function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
+async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
+ const n=await DB.runTransaction(async t=>{const s=await t.get(ref);const c=(s.exists&&s.data()[pre])||0;t.set(ref,{[pre]:c+1},{merge:true});return c+1});
+ if(state.counters)state.counters[pre]=n;return pre+'-'+String(n).padStart(4,'0')}
+function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
+function session(){return S.me}
+function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
 const RANK={customer:0,staff:1,admin:2,super:3};
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2};
-const cartKey=()=>'cart_'+(session()?.id||'x');
+/* subscriptions */
+function subscribeAll(me){
+ const cols=me.role==='customer'
+  ?['items','categories','brands','orders','sales','receipts','saleReturns']
+  :COLLECTION_KEYS;
+ cols.forEach(c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))});
+ S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+ if(me.role!=='customer')S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
+ if(me.role==='customer'&&me.partyId)S.unsubs.push(DB.collection('parties').doc(me.partyId).onSnapshot(s=>{state.myParty=s.exists?Object.assign({id:s.id},s.data()):null;onLive()}));
+}
+/* live re-render guard */
+let liveT=null;
+function onLive(){if(S.booting)return;updateBadges();
+ if(liveT)return;liveT=setTimeout(()=>{liveT=null;
+  const ae=document.activeElement;if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))return;
+  if($('#modalRoot').innerHTML||$('#sheetRoot').innerHTML){return}
+  const h=location.hash||'';if(/\/(new|edit)/.test(h)||h.includes('cart')){return}
+  route()},350)}
+/* cart (device-local) */
+const cartKey=()=>'cart_'+(S.me?.id||'x');
 const cartGet=()=>LS.get(cartKey(),[]);
 const cartSet=v=>{LS.set(cartKey(),v);updateBadges()};
 const cartCount=()=>sum(cartGet(),l=>l.qty);
@@ -327,6 +380,39 @@ function cartAdd(id,qty){const it=itemById(id);if(!it)return;const st=stockOf(id
  if(l)l.qty=want;else c.push({itemId:id,qty:want});cartSet(c);toast('Added to cart')}
 function cartSetQty(id,qty){const c=cartGet();const i=c.findIndex(x=>x.itemId===id);if(i<0)return;
  const st=stockOf(id);qty=Math.max(0,Math.min(st,qty));if(!qty)c.splice(i,1);else c[i].qty=qty;cartSet(c)}
+
+/* ============ auth helpers ============ */
+const mobileToEmail=m=>m+'@munshi.app';
+async function doLogin(mobile,pw){
+ let email=mobileToEmail(mobile);
+ try{const ld=await DB.collection('logins').doc(mobile).get();if(ld.exists&&ld.data().email)email=ld.data().email}catch(e){}
+ await auth.signInWithEmailAndPassword(email,pw)}
+async function createAuthUser(email,pw){
+ const app2=firebase.apps.find(a=>a.name==='secondary')||firebase.initializeApp(FIREBASE_CONFIG,'secondary');
+ const a2=app2.auth();
+ try{await a2.setPersistence(firebase.auth.Auth.Persistence.NONE)}catch(e){}
+ const cred=await a2.createUserWithEmailAndPassword(email,pw);
+ const uidOut=cred.user.uid;
+ try{await a2.signOut()}catch(e){}
+ return uidOut}
+async function changeMyPw(curPw,newPw){const u=auth.currentUser;
+ const cred=firebase.auth.EmailAuthProvider.credential(u.email,curPw);
+ await u.reauthenticateWithCredential(cred);await u.updatePassword(newPw)}
+/* admin reset = new auth identity + remap (no old password needed) */
+async function adminResetPw(user,newPw){
+ const mobile=user.mobile;
+ const old=await DB.collection('logins').doc(mobile).get().catch(()=>null);
+ const suffix=Math.random().toString(36).slice(2,8);
+ const newEmail=mobile+'.'+suffix+'@munshi.app';
+ const newUid=await createAuthUser(newEmail,newPw);
+ const batch=DB.batch();
+ const ud={name:user.name,mobile,role:user.role,active:user.active!==false,created:user.created||Date.now()};
+ if(user.partyId)ud.partyId=user.partyId;
+ batch.set(DB.collection('users').doc(newUid),ud);
+ batch.delete(DB.collection('users').doc(user.id));
+ batch.set(DB.collection('logins').doc(mobile),{email:newEmail});
+ await batch.commit();
+ return newUid}
 
 /* ============ computed: stock / ledger ============ */
 function stockOf(itemId){let q=(itemById(itemId)?.openingStock)||0;
@@ -365,7 +451,6 @@ truck:'<path d="M2.5 6.5H14V17H2.5z"/><path d="M14 10h4.2l3 3.2V17H14"/><circle 
 box:'<path d="M12 2.8 21 7.6v8.8l-9 4.8-9-4.8V7.6z"/><path d="M3.2 7.8 12 12.5l8.8-4.7"/><path d="M12 12.5v8.4"/>',
 grid:'<rect x="4.5" y="4.5" width="4" height="4" rx="1.2" fill="currentColor" stroke="none"/><rect x="15.5" y="4.5" width="4" height="4" rx="1.2" fill="currentColor" stroke="none"/><rect x="4.5" y="15.5" width="4" height="4" rx="1.2" fill="currentColor" stroke="none"/><rect x="15.5" y="15.5" width="4" height="4" rx="1.2" fill="currentColor" stroke="none"/>',
 users:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><path d="M15.5 5.4a3.2 3.2 0 0 1 0 5.9"/><path d="M17.5 15.3c1.7.7 2.8 2.3 3.2 4.7"/>',
-wallet:'<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M15.5 12.5h2.5"/><path d="M3 9h18"/>',
 book:'<path d="M4 5a2.5 2.5 0 0 1 2.5-2.5H20v16H6.5A2.5 2.5 0 0 0 4 21V5Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/>',
 chart:'<path d="M4 20h16"/><path d="M7.5 16v-5"/><path d="M12 16V6"/><path d="M16.5 16v-8"/>',
 tag:'<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7a2 2 0 0 1 1.4.6l6.6 6.6a2 2 0 0 1 0 2.8l-6.7 6.7a2 2 0 0 1-2.8 0l-6.6-6.6a2 2 0 0 1-.6-1.4Z"/><circle cx="8" cy="8" r="1.4"/>',
@@ -405,7 +490,7 @@ const navItems=u=>NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.rol
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
 
 /* ============ ui atoms ============ */
-function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.innerHTML=ic(type==='err'?'alert':'check',16)+esc(msg);$('#toastRoot').appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),320)},2400)}
+function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.innerHTML=ic(type==='err'?'alert':'check',16)+esc(msg);$('#toastRoot').appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),320)},2600)}
 function openModal(html){$('#modalRoot').innerHTML=`<div class="mask" id="mMask"><div class="modal">${html}</div></div>`;document.body.classList.add('locked');$('#mMask').addEventListener('click',e=>{if(e.target.id==='mMask')closeModal()})}
 function closeModal(){$('#modalRoot').innerHTML='';document.body.classList.remove('locked')}
 function confirmBox(title,msg,onYes){openModal(`<div class="mhead"><h3>${esc(title)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div><div class="mbody" style="color:var(--ink2)">${esc(msg)}</div><div class="mfoot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" id="cfYes">Yes, continue</button></div>`);
@@ -414,14 +499,16 @@ function openSheet(html){$('#sheetRoot').innerHTML=`<div class="mask" id="sMask"
 function closeSheet(){$('#sheetRoot').innerHTML='';document.body.classList.remove('locked')}
 document.addEventListener('click',e=>{const a=e.target.closest('[data-close-sheet]');if(a)closeSheet()});
 const sel=(v,cur)=>v===cur?'selected':'';
+function showLoading(msg){$('#app').innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)"><div class="card cardpad" style="text-align:center;max-width:340px"><div class="mark" style="margin:0 auto 12px">M</div><b style="font:700 17px var(--disp)">Munshi</b><p class="muted" style="font-size:13px;margin-top:6px">${esc(msg||'Connecting to your books…')}</p></div></div>`}
+function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b>, find <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span> at the top of the script, and paste the config object from your Firebase project (Project settings → Your apps → Web app). Full steps are in the setup guide. Also set your own <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">SETUP_CODE</span> and publish the Firestore security rules from the guide.</p></div></div>`}
 
-/* ============ auth ============ */
+/* ============ auth screens ============ */
 function authShell(inner){
  $('#app').innerHTML=`<div class="authwrap">
   <div class="aleft ruled-bg">
     <div style="display:flex;align-items:center;gap:12px"><div class="mark">M</div><div><b style="font:800 22px var(--disp);letter-spacing:-.01em;color:#F2F6F0">Munshi</b><div style="font:500 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8FA795">Books · Stock · Orders</div></div></div>
     <h2 style="font:700 clamp(30px,4vw,44px)/1.12 var(--disp);letter-spacing:-.02em;margin-top:44px;max-width:440px;color:#F4F7F1">Every accessory,<br>accounted for.</h2>
-    <p style="margin-top:14px;color:#A7BCAD;max-width:400px;font-size:14.5px">Invoices, returns, ledgers, stock and a direct ordering portal for your customers — invite-only access for staff, mobile-number logins for everyone.</p>
+    <p style="margin-top:14px;color:#A7BCAD;max-width:400px;font-size:14.5px">Live shared books on Google Firebase — invoices, returns, ledgers, stock and a direct ordering portal, in sync on every device.</p>
     <div class="aruled">
       <div class="arow"><span>SI-0041 · Sharma Mobile Centre</span><span style="color:#E5C687">12,480.00 Dr</span></div>
       <div class="arow"><span>ORD-0022 · new order placed</span><span style="color:#7FD0A5">awaiting confirm</span></div>
@@ -429,47 +516,43 @@ function authShell(inner){
     </div>
   </div>
   <div class="aright">${inner}</div></div>`;}
-
-/* ---- login (public page: no signup links at all) ---- */
-function renderAuth(){
+function renderLogin(){
  const noSuper=!USERS().some(u=>u.role==='super');
  authShell(`<div class="card cardpad">
    <span class="lbl">Welcome back</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Sign in to ${esc(SET().businessName)}</h2>
-   <p class="muted" style="font-size:13.5px;margin-bottom:18px">All logins use a <b>mobile number</b> as the ID. Staff and admins join only with an invite code from the owner — there is no public signup.</p>
+   <p class="muted" style="font-size:13.5px;margin-bottom:18px">All logins use a <b>mobile number</b> as the ID. Staff join only with an invite code from the owner — there is no public signup.</p>
    <form id="authForm">
      <div class="field"><label class="fl">Mobile number (login ID)</label><input class="in" id="a-user" required inputmode="numeric" autocomplete="username" placeholder="10-digit mobile"></div>
      <div class="field"><label class="fl">Password</label><input class="in" id="a-pass" type="password" required autocomplete="current-password"></div>
      <div id="authErr" class="notice red" style="display:none"></div>
-     <button class="btn btn-primary" style="width:100%;margin-top:4px">Sign in</button>
+     <button class="btn btn-primary" style="width:100%;margin-top:4px" id="authBtn">Sign in</button>
    </form>
    ${noSuper?`<div class="notice" style="margin-top:16px">${ic('alert',15)}<div>This business hasn't been claimed yet. Owner? <a href="#/setup" style="font-weight:700">Set up this business →</a> (setup key required)</div></div>`:''}
    <div class="authlinks"><a href="#/join">Invited? Join with a code</a><a href="javascript:void(0)" id="forgotLink">Forgot password?</a></div>
-   ${USERS().some(u=>u.mobile==='9999900000')?`<p class="muted" style="font-size:11.5px;margin-top:12px;text-align:center;border-top:1px dashed var(--line);padding-top:10px">Demo customer — mobile <b>99999 00000</b> · password <b>1234</b></p>`:''}
  </div>`);
  $('#forgotLink').onclick=openForgotModal;
  $('#authForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#authErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
-  const mob=normMobile($('#a-user').value),pw=$('#a-pass').value;
+  const mob=normMobile($('#a-user').value),pw=$('#a-pass').value,b=$('#authBtn');
   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
-  const u=USERS().find(x=>(x.mobile===mob||x.username===mob)&&x.active!==false);
-  if(!u||u.pw!==await hashPw(pw))return err('Invalid mobile number or password');
-  setSession(u);renderShell();go(u.role==='customer'?'shop':'dash');toast('Signed in as '+u.name)};
+  b.disabled=true;b.textContent='Signing in…';
+  try{await doLogin(mob,pw)}catch(ex){b.disabled=false;b.textContent='Sign in';
+   const m=ex.code==='auth/too-many-requests'?'Too many attempts — try again in a few minutes.':'Invalid mobile number or password';err(m)}};
 }
 function openForgotModal(){openModal(`<div class="mhead"><h3>Reset password request</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><p class="muted" style="font-size:13px;margin-bottom:14px">Enter your registered mobile number. The admin will set a new password and share it with you directly — there is no email/SMS in this system.</p>
+ <div class="mbody"><p class="muted" style="font-size:13px;margin-bottom:14px">Enter your registered mobile number. The admin will set a new password and share it with you directly.</p>
  <form id="fgForm"><div class="field"><label class="fl">Registered mobile number</label><input class="in" id="fg-mob" inputmode="numeric" required placeholder="10-digit mobile"></div>
  <div id="fgErr" class="notice red" style="display:none"></div>
  <button class="btn btn-primary" style="width:100%">Send request to admin</button></form></div>`);
- $('#fgForm').onsubmit=e=>{e.preventDefault();const m=normMobile($('#fg-mob').value);
-  const u=USERS().find(x=>(x.mobile===m||x.username===m)&&x.active!==false);
-  if(!u){const n=$('#fgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>No account found with this mobile number.</span>';return}
-  if(RESETS().some(r=>r.userId===u.id&&r.status==='pending')){closeModal();toast('A reset request is already pending with the admin');return}
-  dbAdd('pwResets',{userId:u.id,name:u.name,mobile:m,status:'pending'});
-  closeModal();toast('Request sent — ask your admin for the new password')}}
-
-/* ---- owner setup (hidden URL + secret key) ---- */
+ $('#fgForm').onsubmit=async e=>{e.preventDefault();const m=normMobile($('#fg-mob').value);
+  let exists=false;try{exists=(await DB.collection('logins').doc(m).get()).exists}catch(ex){}
+  if(!exists){const n=$('#fgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>No account found with this mobile number.</span>';return}
+  try{await DB.collection('pwResets').add({mobile,status:'pending',created:Date.now()});
+   closeModal();toast('Request sent — ask your admin for the new password')}
+  catch(ex){closeModal();toast('Request already pending or failed','err')}}}
 function renderSetup(){
- if(USERS().some(u=>u.role==='super')){
+ const hasSuper=USERS().some(u=>u.role==='super');
+ if(hasSuper&&S.me){
   authShell(`<div class="card cardpad" style="text-align:center">
    <span class="lbl">Business setup</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 6px">Already set up</h2>
@@ -480,7 +563,7 @@ function renderSetup(){
   authShell(`<div class="card cardpad">
    <span class="lbl">One-time business setup</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Claim this business</h2>
-   <p class="muted" style="font-size:13.5px;margin-bottom:18px">Enter the <b>setup key</b> that was set in the site's source code. Only the owner should know it — without it this page does nothing.</p>
+   <p class="muted" style="font-size:13.5px;margin-bottom:18px">Enter the <b>setup key</b> set in the site's source code. Claim your site soon after deploying — the first valid setup becomes the owner.</p>
    ${locked?`<div class="notice red">${ic('alert',15)}<div>Setup is locked: the file still contains the default <span class="mono">SETUP_CODE</span>. Edit <b>index.html</b>, set your own secret key, redeploy, then come back here.</div></div>`:''}
    <form id="skForm">
      <div class="field"><label class="fl">Setup key</label><input class="in" id="sk" required placeholder="Paste the setup key" autocomplete="off"></div>
@@ -503,53 +586,30 @@ function renderSetup(){
      <div class="frow"><div class="field"><label class="fl">Password</label><input class="in" id="su-pw" type="password" required autocomplete="new-password"></div>
      <div class="field"><label class="fl">Confirm password</label><input class="in" id="su-pw2" type="password" required autocomplete="new-password"></div></div>
      <div id="suErr" class="notice red" style="display:none"></div>
-     <button class="btn btn-primary" style="width:100%">Create super admin & open books</button>
+     <button class="btn btn-primary" style="width:100%" id="suBtn">Create super admin & open books</button>
    </form>
    <div class="authlinks"><a href="javascript:void(0)" id="suBack">← Use a different key</a></div></div>`);
  $('#suBack').onclick=()=>{S.setupOK=false;renderSetup()};
  $('#suForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#suErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
-  const biz=$('#su-biz').value.trim(),name=$('#su-name').value.trim(),mob=normMobile($('#su-mob').value),pw=$('#su-pw').value;
+  const biz=$('#su-biz').value.trim(),name=$('#su-name').value.trim(),mob=normMobile($('#su-mob').value),pw=$('#su-pw').value,b=$('#suBtn');
   if(!biz)return err('Business name is required');
   if(!name)return err('Your name is required');
   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
   if(pw.length<4)return err('Password must be at least 4 characters');
   if(pw!==$('#su-pw2').value)return err('Passwords do not match');
-  if(USERS().some(u=>u.mobile===mob))return err('This mobile number is already registered');
-  const s=SET();s.businessName=biz;saveSet(s);
-  const u=await dbAdd('users',{name,mobile:mob,pw:await hashPw(pw),role:'super',active:true});
-  S.setupOK=false;setSession(u);renderShell();go('dash');toast('Business ready — welcome, '+name.split(' ')[0])};
+  b.disabled=true;b.textContent='Creating…';
+  try{
+   const cred=await auth.createUserWithEmailAndPassword(mobileToEmail(mob),pw);
+   const batch=DB.batch();
+   batch.set(DB.collection('users').doc(cred.user.uid),{name,mobile:mob,role:'super',active:true,created:Date.now()});
+   batch.set(DB.collection('settings').doc('config'),{businessName:biz,currency:'₹',currencyWord:'Rupees',phone:'',address:''});
+   batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
+   await batch.commit();
+  }catch(ex){b.disabled=false;b.textContent='Create super admin & open books';
+   return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Setup failed: '+ex.code)}
+ };
 }
-
-/* ---- invite signup (code required before the form is shown) ---- */
 function renderJoin(){
- if(S.joinInvite){
-  const inv=S.joinInvite;
-  authShell(`<div class="card cardpad">
-   <span class="lbl">Invite accepted</span>
-   <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Create your account</h2>
-   <p class="muted" style="font-size:13.5px;margin-bottom:18px">You've been invited as <b>${inv.role==='admin'?'an Admin':'Staff'}</b> at ${esc(SET().businessName)}. Your mobile number becomes your login ID.</p>
-   <form id="jf">
-     <div class="field"><label class="fl">Your full name</label><input class="in" id="j-name" required></div>
-     <div class="field"><label class="fl">Mobile number (login ID)</label><input class="in" id="j-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
-     <div class="frow"><div class="field"><label class="fl">Password</label><input class="in" id="j-pw" type="password" required autocomplete="new-password"></div>
-     <div class="field"><label class="fl">Confirm password</label><input class="in" id="j-pw2" type="password" required autocomplete="new-password"></div></div>
-     <div id="jErr" class="notice red" style="display:none"></div>
-     <button class="btn btn-primary" style="width:100%">Create account & sign in</button>
-   </form>
-   <div class="authlinks"><a href="javascript:void(0)" id="jCancel">Use a different code</a></div></div>`);
-  $('#jCancel').onclick=()=>{S.joinInvite=null;renderJoin()};
-  $('#jf').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#jErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
-   const name=$('#j-name').value.trim(),mob=normMobile($('#j-mob').value),pw=$('#j-pw').value;
-   if(!name)return err('Name is required');
-   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
-   if(pw.length<4)return err('Password must be at least 4 characters');
-   if(pw!==$('#j-pw2').value)return err('Passwords do not match');
-   if(USERS().some(u=>u.mobile===mob))return err('This mobile number is already registered');
-   const st=inviteState(inv);if(st[0]!=='open'){S.joinInvite=null;return renderJoin()}
-   const u=await dbAdd('users',{name,mobile:mob,pw:await hashPw(pw),role:inv.role,active:true});
-   dbUpdate('invites',inv.id,{used:true,usedBy:name,usedTs:Date.now()});
-   S.joinInvite=null;setSession(u);renderShell();go('dash');toast('Welcome aboard, '+name.split(' ')[0])};
-  return}
  authShell(`<div class="card cardpad">
    <span class="lbl">Join the team</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Enter your invite code</h2>
@@ -560,41 +620,84 @@ function renderJoin(){
      <button class="btn btn-primary" style="width:100%">Continue</button>
    </form>
    <div class="authlinks"><a href="#/login">← Back to login</a></div></div>`);
- $('#jcForm').onsubmit=e=>{e.preventDefault();const err=m=>{const n=$('#jcErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+ $('#jcForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#jcErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
   const code=$('#jc-code').value.trim().toUpperCase();
-  const inv=INVITES().find(v=>v.code.toUpperCase()===code);
-  if(!inv)return err("This code doesn't exist. Check with your admin.");
-  const st=inviteState(inv);
+  if(!/^MST-[A-Z2-9]{6}$/.test(code))return err("That doesn't look like a valid code.");
+  let inv;try{inv=await DB.collection('invites').doc(code).get()}catch(ex){return err('Could not verify the code. Check your internet.')}
+  if(!inv.exists)return err("This code doesn't exist. Check with your admin.");
+  const d=inv.data();const st=inviteState(d);
   if(st[0]==='used')return err('This code has already been used.');
   if(st[0]==='expired')return err('This code has expired. Ask for a new one.');
-  if(inv.role==='customer')return err('This code type is not valid for signup.');
-  S.joinInvite=inv;renderJoin()};
+  showJoinForm({id:code,role:d.role})};
 }
+function showJoinForm(inv){
+ authShell(`<div class="card cardpad">
+   <span class="lbl">Invite accepted</span>
+   <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Create your account</h2>
+   <p class="muted" style="font-size:13.5px;margin-bottom:18px">You've been invited as <b>${inv.role==='admin'?'an Admin':'Staff'}</b>. Your mobile number becomes your login ID.</p>
+   <form id="jf">
+     <div class="field"><label class="fl">Your full name</label><input class="in" id="j-name" required></div>
+     <div class="field"><label class="fl">Mobile number (login ID)</label><input class="in" id="j-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
+     <div class="frow"><div class="field"><label class="fl">Password</label><input class="in" id="j-pw" type="password" required autocomplete="new-password"></div>
+     <div class="field"><label class="fl">Confirm password</label><input class="in" id="j-pw2" type="password" required autocomplete="new-password"></div></div>
+     <div id="jErr" class="notice red" style="display:none"></div>
+     <button class="btn btn-primary" style="width:100%" id="jBtn">Create account & sign in</button>
+   </form>
+   <div class="authlinks"><a href="javascript:void(0)" id="jCancel">Use a different code</a></div></div>`);
+ $('#jCancel').onclick=()=>renderJoin();
+ $('#jf').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#jErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const name=$('#j-name').value.trim(),mob=normMobile($('#j-mob').value),pw=$('#j-pw').value,b=$('#jBtn');
+  if(!name)return err('Name is required');
+  if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
+  if(pw.length<4)return err('Password must be at least 4 characters');
+  if(pw!==$('#j-pw2').value)return err('Passwords do not match');
+  b.disabled=true;b.textContent='Creating…';
+  try{
+   const re=await DB.collection('invites').doc(inv.id).get();
+   if(!re.exists||re.data().used){b.disabled=false;b.textContent='Create account & sign in';return err('This code has just been used or revoked.')}
+   const cred=await auth.createUserWithEmailAndPassword(mobileToEmail(mob),pw);
+   await DB.collection('users').doc(cred.user.uid).set({name,mobile:mob,role:inv.role,inviteCode:inv.id,active:true,created:Date.now()});
+   await DB.collection('logins').doc(mob).set({email:mobileToEmail(mob)});
+   await DB.collection('invites').doc(inv.id).set({used:true,usedBy:name,usedTs:Date.now()},{merge:true});
+  }catch(ex){b.disabled=false;b.textContent='Create account & sign in';
+   return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Signup failed: '+ex.code)}};
+}
+function openSelfPwModal(){openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+ <div class="mbody"><form id="pwForm">
+  <div class="field"><label class="fl">Current password</label><input class="in" id="pw0" type="password" required></div>
+  <div class="field"><label class="fl">New password</label><input class="in" id="pw1" type="password" required></div>
+  <div class="field"><label class="fl">Confirm new password</label><input class="in" id="pw2" type="password" required></div>
+  <div id="pwErr" class="notice red" style="display:none"></div>
+  <button class="btn btn-primary" style="width:100%">Update password</button></form></div>`);
+ $('#pwForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#pwErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  if($('#pw1').value.length<4)return err('New password too short');
+  if($('#pw1').value!==$('#pw2').value)return err('Passwords do not match');
+  try{await changeMyPw($('#pw0').value,$('#pw1').value);closeModal();toast('Password updated')}
+  catch(ex){err(ex.code==='auth/wrong-password'?'Current password is wrong':'Could not update: '+ex.code)}}}
 
 /* ============ shell ============ */
 function renderShell(){
- const u=session(),s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
+ const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
  const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
  const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="margin-left:auto;display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="margin-left:auto;display:none">0</span>`:'';
   return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}">${ic(it[2],17)}${it[1]}${b}</a>`};
  $('#app').innerHTML=`
  <aside class="side">
-   <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>${isCust?'Customer portal':'Munshi · Distribution'}</span></div></div>
+   <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>${isCust?'Customer portal':'Live · Firebase'}</span></div></div>
    <nav id="sideNav">${nav.map(g=>(g.g?`<div class="sgroup">${g.g}</div>`:'')+g.items.map(linkHtml).join('')).join('')}</nav>
    <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
  </aside>
  <main class="main">
    <header class="topbar"><div class="tleft"><a class="icon-btn" id="topBack" href="#/${isCust?'shop':'dash'}">${ic('back',17)}</a><h1 id="pageTitle">${isCust?'Shop':'Dashboard'}</h1></div>
-   <div class="tright"><span class="tdate" id="tDate"></span><button class="uchip" id="uChip"><span class="uname">${esc(u.name)}</span><span class="avatar">${ini}</span></button></div></header>
+   <div class="tright"><span class="livewrap"><i></i>LIVE</span><button class="uchip" id="uChip"><span class="uname">${esc(u.name)}</span><span class="avatar">${ini}</span></button></div></header>
    <div id="view" class="view"></div>
  </main>
  <nav class="bnav">${(isCust?CNAV:[['dash','Home','home'],['sales','Sales','bag'],['purchases','Purchase','truck'],['r/stock','Stock','box'],['more','More','grid']]).map(it=>{
    const b=it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:it[0]==='more'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:'';
    return it[0]==='more'?`<button id="moreBtn">${ic(it[2],20)}${it[1]}${b}</button>`:`<a href="#/${it[0]}" data-nav="${it[0]}">${ic(it[2],20)}${it[1]}${b}</a>`}).join('')}</nav>`;
- $('#tDate').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
  $('#uChip').onclick=()=>isCust?openAccountSheet():userSheet();
  $('#sideOut').onclick=logout;
- $('#moreBtn')&&($('#moreBtn').onclick=moreSheet);
+ const mb=$('#moreBtn');if(mb)mb.onclick=moreSheet;
  updateBadges();
 }
 function updateBadges(){const n=ORDERS().filter(o=>o.status==='new').length,c=cartCount();
@@ -603,12 +706,12 @@ function updateBadges(){const n=ORDERS().filter(o=>o.status==='new').length,c=ca
 function setTop(t,back){const el=$('#pageTitle');if(el)el.textContent=t;const b=$('#topBack');if(b){if(back){b.href='#/'+back;b.classList.add('show')}else b.classList.remove('show')}}
 function setActiveNav(key){qsa('.slink,[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===key))}
 function go(path){const h='#/'+path;if(location.hash===h)route();else location.hash=h}
-function moreSheet(){const u=session();
+function moreSheet(){const u=S.me;
  openSheet(`<div class="shhead"><b>All sections</b><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
  ${navItems(u).map(g=>`<div class="shg"><span class="lbl">${g.g}</span>${g.items.map(it=>`<a class="shlink" href="#/${it[0]}" data-close-sheet>${ic(it[2],18)}${it[1]}<span class="chev">${ic('back',15).replace('M19 12H5','m9 5 7 7-7 7').replace('m11.5 5.5-6.5 6.5 6.5 6.5','')}</span></a>`).join('')}</div>`).join('')}
  <div style="height:14px"></div>`)}
-function userSheet(){const u=session();
- openSheet(`<div class="shhead"><div style="display:flex;gap:11px;align-items:center"><span class="avatar" style="width:40px;height:40px;font-size:14px">${u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</span><div><b style="font:700 15px var(--disp);display:block">${esc(u.name)}</b><span class="lbl">${u.role==='super'?'Super admin':u.role}</span></div></div><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
+function userSheet(){const u=S.me;
+ openSheet(`<div class="shhead"><div style="display:flex;gap:11px;align-items:center"><span class="avatar" style="width:40px;height:40px;font-size:14px">${u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</span><div><b style="font:700 15px var(--disp);display:block">${esc(u.name)}</b><span class="lbl">${u.role==='super'?'Super admin':u.role} · ${esc(u.mobile||'')}</span></div></div><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
  <div class="shg"><span class="lbl">Account</span>
   <button class="shlink" style="width:100%;text-align:left" id="shPw">${ic('gear',18)}Change my password<span class="chev">${ic('back',15)}</span></button>
   <a class="shlink" href="#/settings" data-close-sheet>${ic('gear',18)}Settings<span class="chev">${ic('back',15)}</span></a>
@@ -616,7 +719,7 @@ function userSheet(){const u=session();
   <button class="shlink" style="width:100%;text-align:left;color:var(--red)" id="shOut">${ic('logout',18)}Sign out<span class="chev">${ic('back',15)}</span></button>
  </div><div style="height:10px"></div>`);
  $('#shOut').onclick=logout;$('#shPw').onclick=()=>{closeSheet();openSelfPwModal()}}
-function openAccountSheet(){const u=session(),p=partyById(u.partyId),bal=p?partyBalance(p.id):0;setActiveNav('account');
+function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalance(p.id):0;setActiveNav('account');
  openSheet(`<div class="shhead"><div style="display:flex;gap:11px;align-items:center"><span class="avatar" style="width:40px;height:40px;font-size:14px">${u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</span><div><b style="font:700 15px var(--disp);display:block">${esc(u.name)}</b><span class="lbl">Customer · ${esc(u.mobile||'—')}</span></div></div><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
  <div class="shg"><span class="lbl">Account</span>
   <div class="shlink" style="cursor:default">${ic('wallet',18)}Outstanding balance<b style="margin-left:auto;font-family:var(--mono);color:${bal>0.004?'var(--red)':'var(--green)'}">${money(Math.abs(bal))}${Math.abs(bal)<0.004?'':bal>0?' due':''}</b></div>
@@ -624,27 +727,15 @@ function openAccountSheet(){const u=session(),p=partyById(u.partyId),bal=p?party
   <button class="shlink" style="width:100%;text-align:left;color:var(--red)" id="acOut">${ic('logout',18)}Sign out<span class="chev">${ic('back',15)}</span></button>
  </div><div style="height:10px"></div>`);
  $('#acOut').onclick=logout;$('#acPw').onclick=()=>{closeSheet();openSelfPwModal()}}
-function openSelfPwModal(){openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><form id="pwForm">
-  <div class="field"><label class="fl">Current password</label><input class="in" id="pw0" type="password" required></div>
-  <div class="field"><label class="fl">New password</label><input class="in" id="pw1" type="password" required></div>
-  <div class="field"><label class="fl">Confirm new password</label><input class="in" id="pw2" type="password" required></div>
-  <button class="btn btn-primary" style="width:100%">Update password</button></form></div>`);
- $('#pwForm').onsubmit=async e=>{e.preventDefault();const u=session();
-  if(u.pw!==await hashPw($('#pw0').value))return toast('Current password is wrong','err');
-  if($('#pw1').value.length<4)return toast('New password too short','err');
-  if($('#pw1').value!==$('#pw2').value)return toast('Passwords do not match','err');
-  dbUpdate('users',u.id,{pw:await hashPw($('#pw1').value)});closeModal();toast('Password updated')}}
 
 /* ============ dashboard ============ */
 function countUp(el,target){const t0=performance.now(),dur=850;const step=t=>{const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=money(target*e);if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
 function vDash(){
  setTop('Dashboard');setActiveNav('dash');
- const t=todayISO(),y=addDays(t,-1),u=session(),s=SET();
+ const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
  const daySales=sum(SALES().filter(d=>d.date===t),d=>d.total),yS=sum(SALES().filter(d=>d.date===y),d=>d.total);
  const dayPur=sum(PURCHASES().filter(d=>d.date===t),d=>d.total),yP=sum(PURCHASES().filter(d=>d.date===y),d=>d.total);
  const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(SALES().filter(d=>d.date===t),d=>d.paid)+sum(PRET().filter(d=>d.date===t&&d.settle==='cash'),d=>d.cashAmount);
- const payT=sum(PAYMENTS().filter(r=>r.date===t),r=>r.amount)+sum(PURCHASES().filter(d=>d.date===t),d=>d.paid)+sum(SRET().filter(d=>d.date===t&&d.settle==='cash'),d=>d.cashAmount);
  const newOrd=ORDERS().filter(o=>o.status==='new').length;
  const isEmpty=!SALES().length&&!PURCHASES().length&&!RECEIPTS().length;
  const days=[],sv=[],pv=[];for(let i=13;i>=0;i--){const d=addDays(t,-i);days.push(d);sv.push(sum(SALES().filter(x=>x.date===d),x=>x.total));pv.push(sum(PURCHASES().filter(x=>x.date===d),x=>x.total))}
@@ -652,7 +743,7 @@ function vDash(){
  const ms=monthStart(t);const tl=groupBy(saleLinesOf(SALES().filter(d=>d.date>=ms)),'itemId');
  const top=Object.keys(tl).map(id=>({id,net:sum(tl[id],r=>r.net),qty:sum(tl[id],r=>r.qty)})).sort((a,b)=>b.net-a.net).slice(0,5);
  const maxTop=top[0]?top[0].net:1;
- const feed=[...SALES().map(d=>({...d,_t:'sale'})),...PURCHASES().map(d=>({...d,_t:'purchase'})),...SRET().map(d=>({...d,_t:'saleReturn'})),...PRET().map(d=>({...d,_t:'purchaseReturn'})),...RECEIPTS().map(d=>({...d,_t:'receipt'})),...PAYMENTS().map(d=>({...d,_t:'payment'})),...ORDERS().filter(o=>o.status==='new').map(d=>({...d,_t:'orderNew',total:sum(d.lines,l=>l.qty*l.rate)}))].sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,8);
+ const feed=[...SALES().map(d=>({...d,_t:'sale'})),...PURCHASES().map(d=>({...d,_t:'purchase'})),...SRET().map(d=>({...d,_t:'saleReturn'})),...PRET().map(d=>({...d,_t:'purchaseReturn'})),...RECEIPTS().map(d=>({...d,_t:'receipt'})),...PAYMENTS().map(d=>({...d,_t:'payment'})),...ORDERS().filter(o=>o.status==='new').map(d=>({...d,_t:'orderNew'}))].sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,8);
  const FM={sale:['bag','Sale','var(--green-soft)','var(--green)','sales'],purchase:['truck','Purchase','var(--red-soft)','var(--red)','purchases'],saleReturn:['in','Sale Return','var(--amber-soft)','var(--amber)','sale-returns'],purchaseReturn:['out','Purchase Return','var(--amber-soft)','var(--amber)','purchase-returns'],receipt:['down','Receipt','var(--green-soft)','var(--green)','collections'],payment:['up','Payment','var(--red-soft)','var(--red)','payments'],orderNew:['order','Order','var(--amber-soft)','var(--amber)','orders']};
  const hr=new Date().getHours(),greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
  V().innerHTML=`
@@ -682,8 +773,8 @@ function vDash(){
  </div></div>`;
  qsa('.kpiV').forEach(el=>countUp(el,+el.dataset.v));
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
- const ob=$('#obSeed');if(ob)ob.onclick=async()=>{await seedDemo();toast('Sample month loaded');vDash()};
- const of_=$('#obFresh');if(of_)of_.onclick=()=>{const s2=SET();s2.welcomed=true;saveSet(s2);vDash()};
+ const ob=$('#obSeed');if(ob)ob.onclick=()=>confirmBox('Load sample data?','Adds a demo month of transactions, a demo customer login (99999 00000 / 1234) and two sample orders to your books.',async()=>{await seedDemo();toast('Sample month loaded');route()});
+ const of_=$('#obFresh');if(of_)of_.onclick=()=>{saveSet(Object.assign({},s,{welcomed:true}))};
  bindPulse();
  let rt;window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{if(location.hash.includes('dash'))vDash()},250)};
 }
@@ -722,8 +813,9 @@ function bindPulse(){const svg=V().querySelector('#pHit');if(!svg)return;
 function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash settled':'Credit note';const b=(+d.total)-(+d.paid);return b<=0?'Paid':+d.paid>0?'Partial':'Unpaid'}
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
  let q='';
- const draw=()=>{const docs=LS.get(D.coll,[]).slice().sort((a,b)=>b.date===a.date?(b.created||0)-(a.created||0):b.date.localeCompare(a.date));
-  const fl=docs.filter(d=>{const p=partyById(d.partyId);return !q||(d.no||'').toLowerCase().includes(q)||(p&&p.name.toLowerCase().includes(q))});
+ const draw=()=>{const docs=LS.get(D.coll,[]).length?[]:null;const all=state[D.coll]||[];
+  const fl=all.slice().sort((a,b)=>b.date===a.date?(b.created||0)-(a.created||0):b.date.localeCompare(a.date))
+   .filter(d=>{const p=partyById(d.partyId);return !q||(d.no||'').toLowerCase().includes(q)||(p&&p.name.toLowerCase().includes(q))});
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${D.title}s</div><div class="psub">${fl.length} documents · ${money(sum(fl,d=>d.total))} total</div></div><a class="btn btn-primary" href="#/${D.path}/new">${ic('plus',16)}New</a></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="dq" placeholder="Search by no. or party…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${fl.length?fl.map(d=>{const p=partyById(d.partyId),st=docStatus(d,type);
@@ -784,9 +876,8 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
      <div class="trow grand"><span>${D.isReturn?'Return value':'Total'}</span><b id="t-total">0</b></div>
      ${D.isReturn?'':`<div class="trow"><span class="muted">Balance due</span><b id="t-bal">0</b></div>`}
    </div>
-   <div class="savebar"><a class="btn btn-ghost" href="#/${D.path}">Cancel</a><button class="btn btn-primary">${ic('check',16)}Save ${D.title}</button></div>
+   <div class="savebar"><a class="btn btn-ghost" href="#/${D.path}">Cancel</a><button class="btn btn-primary" id="docSaveBtn">${ic('check',16)}Save ${D.title}</button></div>
  </form>`;
- function nextPreview(pre){const c=SET().counters[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
  function itemOpts(sid){let h='<option value="">Select item…</option>';CATS().forEach(c=>{const its=ITEMS().filter(i=>i.categoryId===c.id);if(!its.length)return;h+=`<optgroup label="${esc(c.name)}">`+its.map(i=>`<option value="${i.id}" ${sel(i.id,sid)}>${esc(i.name)}${i.brandId?' — '+esc(brandById(i.brandId)?.name||''):''}</option>`).join('')+'</optgroup>'});return h}
  function lineHtml(l,i){return `<div class="fline" data-i="${i}">
    <select class="sel fl-item">${itemOpts(l.itemId)}</select>
@@ -824,23 +915,25 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
   $('#f-cm').onchange=e=>st.payMode=e.target.value;syncGb();
   if(st.settle==='cash')$('#cashRow').style.display='grid'}
  renderLines();recalc();
- $('#docForm').onsubmit=e=>{e.preventDefault();
-  if(!st.partyId)return toast('Select a party','err');
-  const lines=st.lines.filter(l=>l.itemId&&l.qty>0);
-  if(!lines.length)return toast('Add at least one item with quantity','err');
-  if(lines.some(l=>!(+l.rate>=0)))return toast('Rates must be 0 or more','err');
-  const t=totals();
-  const base={date:st.date,partyId:st.partyId,lines:lines.map(l=>({itemId:l.itemId,qty:+l.qty,rate:+l.rate})),subtotal:t.sub,total:t.total,note:st.note};
-  let doc;
-  if(D.isReturn){const cash=st.settle==='cash';
-   doc={...base,goodsBack:st.goodsBack,settle:st.settle,cashAmount:cash?(+st.cashAmount||t.total):0,payMode:cash?($('#f-cm')?.value||'Cash'):''};
-  }else{doc={...base,discount:+st.discount||0,paid:Math.max(0,+st.paid||0),payMode:st.payMode}}
-  if(ed){dbUpdate(D.coll,ed.id,doc);toast(D.title+' updated')}
-  else{doc.no=nextNo(D.no);dbAdd(D.coll,doc);toast(D.title+' saved as '+doc.no);
-   if(type==='sale'&&S.draftOrder){const o=dbGet('orders',S.draftOrder);
-    if(o){dbUpdate('orders',o.id,{status:'invoiced',invoiceId:doc.id,history:[...(o.history||[]),{ts:Date.now(),status:'invoiced',by:session().name}]});toast('Order '+o.no+' marked invoiced')}
-    S.draftOrder=null}}
-  go(D.path)}}
+ $('#docForm').onsubmit=async e=>{e.preventDefault();const sb=$('#docSaveBtn');sb.disabled=true;
+  try{
+   if(!st.partyId){toast('Select a party','err');return}
+   const lines=st.lines.filter(l=>l.itemId&&l.qty>0);
+   if(!lines.length){toast('Add at least one item with quantity','err');return}
+   if(lines.some(l=>!(+l.rate>=0))){toast('Rates must be 0 or more','err');return}
+   const t=totals();
+   const base={date:st.date,partyId:st.partyId,lines:lines.map(l=>({itemId:l.itemId,qty:+l.qty,rate:+l.rate})),subtotal:t.sub,total:t.total,note:st.note,created:ed?ed.created:Date.now()};
+   let doc;
+   if(D.isReturn){const cash=st.settle==='cash';
+    doc={...base,goodsBack:st.goodsBack,settle:st.settle,cashAmount:cash?(+st.cashAmount||t.total):0,payMode:cash?($('#f-cm')?.value||'Cash'):''};
+   }else{doc={...base,discount:+st.discount||0,paid:Math.max(0,+st.paid||0),payMode:st.payMode}}
+   if(ed){dbUpdate(D.coll,ed.id,doc);toast(D.title+' updated')}
+   else{doc.no=await nextNo(D.no);dbAdd(D.coll,doc);toast(D.title+' saved as '+doc.no);
+    if(type==='sale'&&S.draftOrder){const o=dbGet('orders',S.draftOrder);
+     if(o){dbUpdate('orders',o.id,{status:'invoiced',invoiceId:doc.id,history:[...(o.history||[]),{ts:Date.now(),status:'invoiced',by:S.me.name}]});toast('Order '+o.no+' marked invoiced')}
+     S.draftOrder=null}}
+   go(D.path)}
+  finally{sb.disabled=false}}}
 
 /* ============ doc view + print ============ */
 function vDocView(type,id){const D=DOC[type],d=dbGet(D.coll,id);setTop(D.title,D.path);
@@ -938,7 +1031,7 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
 
 /* ============ masters: items / categories / brands ============ */
 function vItems(){setTop('Items');setActiveNav('items');let q='';
- const editOK=can.stockEdit(session());
+ const editOK=can.stockEdit(S.me);
  const draw=()=>{const its=ITEMS().slice().sort((a,b)=>a.name.localeCompare(b.name)).filter(i=>!q||(i.name+' '+(i.sku||'')).toLowerCase().includes(q));
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Items</div><div class="psub">${its.length} in catalogue${editOK?'':' · read-only for staff'}</div></div>${editOK?`<button class="btn btn-primary" id="iNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="iq" placeholder="Search items…" value="${esc(q)}"></div>
@@ -951,7 +1044,7 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
    qsa('[data-del]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.del;
     const used=[SALES,PURCHASES,SRET,PRET].some(c=>c().some(d=>d.lines.some(l=>l.itemId===id)));
     if(used)return toast('Item is used in documents — cannot delete','err');
-    confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted');draw()})})}
+    confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted')})})}
   $('#iq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
  draw()}
 function openItemModal(it){openModal(`<div class="mhead"><h3>${it?'Edit item':'New item'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
@@ -982,10 +1075,10 @@ function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
   <button class="btn btn-primary" style="width:100%">Apply adjustment</button></form></div>`);
  $('#saForm').onsubmit=e=>{e.preventDefault();const d=+$('#sa-delta').value;
   if(!d)return toast('Enter a non-zero adjustment','err');
-  dbAdd('stockAdj',{itemId:it.id,delta:d,rate:+$('#sa-rate').value||0,reason:$('#sa-reason').value,date:$('#sa-date').value,by:session().name});
+  dbAdd('stockAdj',{itemId:it.id,delta:d,rate:+$('#sa-rate').value||0,reason:$('#sa-reason').value,date:$('#sa-date').value,by:S.me.name});
   closeModal();toast('Stock adjusted: '+(d>0?'+':'')+d+' → new stock '+stockOf(it.id));route()}}
 function masterPage(key,title,collect,extra){setTop(title);setActiveNav(key);
- const editOK=can.stockEdit(session());
+ const editOK=can.stockEdit(S.me);
  const draw=()=>{const rows=collect().slice().sort((a,b)=>a.name.localeCompare(b.name));
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${title}</div><div class="psub">${rows.length} total</div></div>${editOK?`<button class="btn btn-primary" id="mNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="card"><div class="list">${rows.length?rows.map(r=>`<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(r.name)}</div>${extra?`<div class="lsub">${extra(r)}</div>`:''}</div>
@@ -995,7 +1088,7 @@ function masterPage(key,title,collect,extra){setTop(title);setActiveNav(key);
    qsa('[data-del]').forEach(b=>b.onclick=()=>{const id=b.dataset.del;
     if(key==='categories'&&ITEMS().some(i=>i.categoryId===id))return toast('Category has items','err');
     if(key==='brands'&&ITEMS().some(i=>i.brandId===id))return toast('Brand has items','err');
-    confirmBox('Delete?','This cannot be undone.',()=>{dbDel(key,id);toast('Deleted');draw()})})}};
+    confirmBox('Delete?','This cannot be undone.',()=>{dbDel(key,id);toast('Deleted')})})}};
  draw()}
 function openCBModal(key,obj,after){const label=key==='categories'?'Category':'Brand';
  openModal(`<div class="mhead"><h3>${obj?'Edit '+label:'New '+label}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
@@ -1028,7 +1121,7 @@ function vMoneyList(kind){const isR=kind==='receipt';setTop(isR?'Collections':'P
    return `<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(p?p.name:'—')}</div><div class="lsub"><span>${fmtDate(r.date)}</span><span>·</span><span>${esc(r.mode||'')}</span>${r.note?'<span>·</span><span>'+esc(r.note)+'</span>':''}</div></div>
    <div class="lright"><div class="lamt" style="color:${isR?'var(--green)':'var(--red)'}">${money(r.amount)}</div></div>
    <div style="display:flex;gap:6px"><a class="icon-btn" href="#/${path}/edit/${r.id}">${ic('edit',15)}</a><button class="icon-btn" data-del="${r.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic(isR?'down':'up',34)}<div class="big">Nothing recorded yet</div>${isR?'Cash received from customers appears here.':'Cash paid to suppliers appears here.'}</div>`}</div></div>`;
-  qsa('[data-del]').forEach(b=>b.onclick=()=>confirmBox('Delete entry?','Ledger balances recalculate automatically.',()=>{dbDel(isR?'receipts':'payments',b.dataset.del);toast('Deleted');draw()}))};
+  qsa('[data-del]').forEach(b=>b.onclick=()=>confirmBox('Delete entry?','Ledger balances recalculate automatically.',()=>{dbDel(isR?'receipts':'payments',b.dataset.del);toast('Deleted')}))};
  draw()}
 function vMoneyForm(kind,preParty,editId){const isR=kind==='receipt';setTop((editId?'Edit ':'New ')+(isR?'Collection':'Payment'),isR?'collections':'payments');
  const ed=editId?dbGet(isR?'receipts':'payments',editId):null;
@@ -1040,7 +1133,7 @@ function vMoneyForm(kind,preParty,editId){const isR=kind==='receipt';setTop((edi
   <div class="frow"><div class="field"><label class="fl">Mode</label><select class="sel" id="mf-mode">${['Cash','UPI','Bank','Card','Cheque'].map(m=>`<option ${sel(m,ed?.mode||'Cash')}>${m}</option>`).join('')}</select></div>
   <div class="field"><label class="fl">Note</label><input class="in" id="mf-note" value="${esc(ed?.note||'')}"></div></div>
   <div class="savebar"><a class="btn btn-ghost" href="#/${isR?'collections':'payments'}">Cancel</a><button class="btn btn-primary">${ic('check',16)}Save entry</button></div></form>`;
- $('#mfForm').onsubmit=e=>{e.preventDefault();const o={date:$('#mf-date').value,partyId:$('#mf-party').value,amount:+$('#mf-amt').value||0,mode:$('#mf-mode').value,note:$('#mf-note').value.trim()};
+ $('#mfForm').onsubmit=e=>{e.preventDefault();const o={date:$('#mf-date').value,partyId:$('#mf-party').value,amount:+$('#mf-amt').value||0,mode:$('#mf-mode').value,note:$('#mf-note').value.trim(),created:ed?ed.created:Date.now()};
   if(!o.partyId)return toast('Select a party','err');if(o.amount<=0)return toast('Amount must be more than 0','err');
   if(ed){dbUpdate(isR?'receipts':'payments',ed.id,o);toast('Entry updated')}else{dbAdd(isR?'receipts':'payments',o);toast('Entry saved')}
   go(isR?'collections':'payments')}}
@@ -1192,7 +1285,7 @@ function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
  const draw=()=>{const os=ORDERS().slice().sort((a,b)=>(b.created||0)-(a.created||0));
   const counts={all:os.length};os.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);
   const fl=os.filter(o=>(f==='all'||o.status===f)&&(!q||(o.no+' '+(partyById(o.partyId)?.name||'')).toLowerCase().includes(q)));
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Orders</div><div class="psub">${fl.length} orders · from the customer portal</div></div></div>
+  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Orders</div><div class="psub">${fl.length} orders · from the customer portal · updates live</div></div></div>
   <div class="tabs">${['all','new','confirmed','delivered','invoiced','cancelled'].map(s=>`<button class="chip ${f===s?'on':''}" data-of="${s}">${s==='all'?'All':OSTAT[s][0]}${counts[s]?` <span class="mono" style="opacity:.7">${counts[s]}</span>`:''}</button>`).join('')}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="oq" placeholder="Search order no. or customer…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${fl.length?fl.map(o=>{const p=partyById(o.partyId);
@@ -1202,11 +1295,11 @@ function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
   qsa('.lrow').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
  draw()}
 function setOrderStatus(id,status,by){const o=dbGet('orders',id);if(!o)return;
- dbUpdate('orders',id,{status,history:[...(o.history||[]),{ts:Date.now(),status,by:by||session().name}]});updateBadges()}
+ dbUpdate('orders',id,{status,history:[...(o.history||[]),{ts:Date.now(),status,by:by||S.me.name}]});updateBadges()}
 function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  if(!o){V().innerHTML='<div class="card"><div class="empty">Order not found.</div></div>';return}
  setTop('Order '+o.no,isCustomer?'my-orders':'orders');setActiveNav(isCustomer?'my-orders':'orders');
- const p=partyById(o.partyId),u=session(),staff=!isCustomer;
+ const p=partyById(o.partyId),u=S.me,staff=!isCustomer;
  const acts=[];
  if(staff){
   if(o.status==='new')acts.push(`<button class="btn btn-primary" id="oConfirm">${ic('check',16)}Confirm</button>`);
@@ -1242,7 +1335,7 @@ function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
   V().innerHTML=`
   <div class="pagehead"><div><span class="lbl">${esc(SET().businessName)} · wholesale</span><div class="ptitle">Shop</div><div class="psub">Pick accessories and place an order — we confirm and deliver.</div></div></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="sq" placeholder="Search products…" value="${esc(q)}"></div>
-  <div class="tabs">${['all',...CATS().map(c=>c.id)].map(id=>{const c=id==='all'?null:catById(id);return `<button class="chip ${cf===id?'on':''}" data-cf="${id}">${id==='all'?'All':esc(c.name)}</button>`}).join('')}</div>
+  <div class="tabs">${['all',...CATS().map(c=>c.id)].map(id=>{const c=id==='all'?null:catById(id);return `<button class="chip ${cf===id?'on':''}" data-cf="${id}">${id==='all'?'All':esc(c?c.name:'…')}</button>`}).join('')}</div>
   <div class="pgrid">${items.length?items.map(i=>{const so=stockOf(i.id),t=tileFor(i.categoryId||i.name);
    return `<div class="pcard" data-id="${i.id}">
      <div class="ptile" style="background:${t[0]};color:${t[1]}">${esc(i.name[0]||'?')}</div>
@@ -1293,18 +1386,19 @@ function vCart(){setTop('Cart');setActiveNav('cart');
   qsa('[data-m]').forEach(b=>b.onclick=()=>{const l=cartGet().find(x=>x.itemId===b.dataset.m);cartSetQty(b.dataset.m,(l?.qty||0)-1);draw()});
   qsa('[data-p]').forEach(b=>b.onclick=()=>{const l=cartGet().find(x=>x.itemId===b.dataset.p);cartSetQty(b.dataset.p,(l?.qty||0)+1);draw()});
   qsa('[data-rm]').forEach(b=>b.onclick=()=>{cartSetQty(b.dataset.rm,0);draw()});
-  const po=$('#placeOrder');if(po)po.onclick=()=>{const u=session(),note=($('#c-note')?.value||'').trim();
+  const po=$('#placeOrder');if(po)po.onclick=async()=>{const u=S.me,note=($('#c-note')?.value||'').trim();
    if(!u.partyId)return toast('Your account is not linked to a customer profile — contact admin','err');
    const lines=cartGet().map(l=>{const it=itemById(l.itemId);if(!it)return null;return{itemId:it.id,qty:Math.min(l.qty,Math.max(0,stockOf(it.id))),rate:+it.saleRate||0}}).filter(l=>l&&l.qty>0);
    if(!lines.length)return toast('Cart is empty','err');
    const sub=sum(lines,l=>l.qty*l.rate);
-   const o=dbAdd('orders',{no:nextNo('ORD'),date:todayISO(),userId:u.id,partyId:u.partyId,lines,subtotal:sub,total:sub,status:'new',note,history:[{ts:Date.now(),status:'new',by:u.name}]});
+   const no=await nextNo('ORD');
+   const o=dbAdd('orders',{no,date:todayISO(),userId:u.id,partyId:u.partyId,lines,subtotal:sub,total:sub,status:'new',note,history:[{ts:Date.now(),status:'new',by:u.name}],created:Date.now()});
    cartSet([]);toast('Order '+o.no+' placed — we will confirm shortly');go('my-orders')}};
  draw()}
 function vMyOrders(){setTop('My Orders');setActiveNav('my-orders');
- const u=session();const os=ORDERS().filter(o=>o.userId===u.id).sort((a,b)=>(b.created||0)-(a.created||0));
+ const u=S.me;const os=ORDERS().filter(o=>o.userId===u.id).sort((a,b)=>(b.created||0)-(a.created||0));
  V().innerHTML=`
- <div class="pagehead"><div><div class="ptitle">My Orders</div><div class="psub">${os.length} order${os.length!==1?'s':''} placed</div></div><a class="btn btn-primary" href="#/shop">${ic('plus',16)}New order</a></div>
+ <div class="pagehead"><div><div class="ptitle">My Orders</div><div class="psub">${os.length} order${os.length!==1?'s':''} placed · statuses update live</div></div><a class="btn btn-primary" href="#/shop">${ic('plus',16)}New order</a></div>
  <div class="card"><div class="list">${os.length?os.map(o=>{
   const first=itemById(o.lines[0]?.itemId);
   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(first?first.name:'—')}${o.lines.length>1?' +'+(o.lines.length-1)+' more':''}</span><span>·</span><span>${o.lines.reduce((a,l)=>a+ +l.qty,0)} pcs</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders yet</div>Your placed orders and their status will show here.<div style="margin-top:14px"><a class="btn btn-primary" href="#/shop">Start shopping</a></div></div>`}</div></div>`;
@@ -1312,8 +1406,8 @@ function vMyOrders(){setTop('My Orders');setActiveNav('my-orders');
 
 /* ============ users / customers / invites (admin) ============ */
 function vUsers(){setTop('Users & Customers');setActiveNav('users');
- const me=session();S.report.usersTab=S.report.usersTab||'team';
- const draw=()=>{const tab=S.report.usersTab;
+ const me=S.me;S.usersTab=S.usersTab||'team';
+ const draw=()=>{const tab=S.usersTab;
   const team=USERS().filter(x=>x.role!=='customer'),custs=USERS().filter(x=>x.role==='customer');
   const pend=RESETS().filter(r=>r.status==='pending'),done=RESETS().filter(r=>r.status==='done').slice(-6).reverse();
   const invs=INVITES().slice().sort((a,b)=>(b.createdTs||0)-(a.createdTs||0));
@@ -1323,11 +1417,11 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   if(tab==='team'){body=`<button class="btn btn-primary" id="tuNew" style="margin-bottom:12px">${ic('plus',16)}Add staff / admin directly</button>
    <div class="card"><div class="list">${team.length?team.map(t=>{const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
     return `<div class="lrow editmode"><span class="avatar">${ini}</span>
-    <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||t.username||'—')}</span></div></div>
+    <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
     <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
     ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
-   <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone sets up their own device — they choose their own password and it never passes through you.</p>`}
+   <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
   else if(tab==='customers'){body=`<button class="btn btn-primary" id="tcNew" style="margin-bottom:12px">${ic('plus',16)}Create customer login</button>
    <div class="card"><div class="list">${custs.length?custs.map(t=>{const p=partyById(t.partyId);const bal=p?partyBalance(p.id):0;const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
     return `<div class="lrow editmode"><span class="avatar">${ini}</span>
@@ -1337,14 +1431,14 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic('user',34)}<div class="big">No customer logins yet</div>Create one so they can order from the shop.</div>`}</div></div>`}
   else if(tab==='invites'){body=`<button class="btn btn-primary" id="tiNew" style="margin-bottom:12px">${ic('plus',16)}New invite code</button>
    <div class="card"><div class="list">${invs.length?invs.map(v=>{const st=inviteState(v);
-    return `<div class="lrow editmode"><div class="lmain"><div class="lname"><span class="mono" style="letter-spacing:.05em">${esc(v.code)}</span><span class="badge ${v.role==='admin'?'b-green':'b-gray'}">${v.role}</span></div>
+    return `<div class="lrow editmode"><div class="lmain"><div class="lname"><span class="mono" style="letter-spacing:.05em">${esc(v.id)}</span><span class="badge ${v.role==='admin'?'b-green':'b-gray'}">${v.role}</span></div>
     <div class="lsub"><span>${st[1]}</span>${st[0]==='open'&&v.days?`<span>· expires in ${Math.max(1,Math.ceil((v.createdTs+v.days*864e5-Date.now())/864e5))}d</span>`:''}${v.used?`<span>· used by ${esc(v.usedBy||'—')}</span>`:''}</div></div>
     ${st[0]==='open'?`<button class="btn btn-ghost btn-sm" data-cp="${v.id}">${ic('edit',14)}Copy</button><button class="icon-btn" data-rv="${v.id}" style="color:var(--red)" title="Revoke">${ic('trash',15)}</button>`:st[0]==='expired'?`<button class="icon-btn" data-rv="${v.id}" style="color:var(--red)">${ic('trash',15)}</button>`:''}</div>`}).join(''):`<div class="empty">${ic('tag',34)}<div class="big">No invite codes</div>Generate one and share it privately with your staff member.</div>`}</div></div>
-   <div class="notice" style="margin-top:14px">${ic('alert',15)}<div>Invite codes are the <b>only</b> way someone can create a staff/admin account on this site. Share them by private WhatsApp only, and revoke any code that isn't used.</div></div>`}
+   <div class="notice" style="margin-top:14px">${ic('alert',15)}<div>Invite codes are the <b>only</b> way someone can create a staff/admin account. Share them by private WhatsApp only, and revoke any code that isn't used.</div></div>`}
   else{body=(pend.length?`<div class="lbl" style="margin:4px 0 8px">Pending requests</div><div class="card" style="margin-bottom:14px"><div class="list">${pend.map(r=>`
-    <div class="lrow editmode"><div class="lmain"><div class="lname">${esc(r.name||'—')}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="lmeta">${timeAgo(r.created)}</span>
-    <button class="btn btn-primary btn-sm" data-reset="${r.id}">Set new password</button></div>`).join('')}</div></div>`:`<div class="notice green" style="margin-bottom:14px">${ic('check',15)}<div>No pending password-reset requests.</div></div>`)
-   +(done.length?`<div class="lbl" style="margin:4px 0 8px">Recently reset</div><div class="card"><div class="list">${done.map(r=>`<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(r.name||'—')}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="badge b-green">Done</span><span class="lmeta">${timeAgo(r.doneTs||r.created)}</span></div>`).join('')}</div></div>`:'')}
+    <div class="lrow editmode"><div class="lmain"><div class="lname">${esc(USERS().find(x=>x.mobile===r.mobile)?.name||'Account '+r.mobile)}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="lmeta">${timeAgo(r.created)}</span>
+    <button class="btn btn-primary btn-sm" data-resetm="${r.mobile}">Set new password</button></div>`).join('')}</div></div>`:`<div class="notice green" style="margin-bottom:14px">${ic('check',15)}<div>No pending password-reset requests.</div></div>`)
+   +(done.length?`<div class="lbl" style="margin:4px 0 8px">Recently reset</div><div class="card"><div class="list">${done.map(r=>`<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(USERS().find(x=>x.mobile===r.mobile)?.name||r.mobile)}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="badge b-green">Done</span><span class="lmeta">${timeAgo(r.doneTs||r.created)}</span></div>`).join('')}</div></div>`:'')}
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Users & Customers</div><div class="psub">All login IDs are mobile numbers · signup is invite-only</div></div></div>
   <div class="tabs">
    <button class="chip ${tab==='team'?'on':''}" data-ut="team">Team (${team.length})</button>
@@ -1352,23 +1446,23 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    <button class="chip ${tab==='invites'?'on':''}" data-ut="invites">Invites${openInv?` <span class="nbadge">${openInv}</span>`:''}</button>
    <button class="chip ${tab==='resets'?'on':''}" data-ut="resets">Reset requests${pend.length?` <span class="nbadge">${pend.length}</span>`:''}</button>
   </div>${body}`;
-  qsa('[data-ut]').forEach(b=>b.onclick=()=>{S.report.usersTab=b.dataset.ut;draw()});
+  qsa('[data-ut]').forEach(b=>b.onclick=()=>{S.usersTab=b.dataset.ut;draw()});
   const tn=$('#tuNew');if(tn)tn.onclick=()=>openTeamModal();
   const cn=$('#tcNew');if(cn)cn.onclick=()=>openCustomerModal();
   const tin=$('#tiNew');if(tin)tin.onclick=()=>openInviteModal();
-  qsa('[data-cp]').forEach(b=>b.onclick=()=>{const v=INVITES().find(x=>x.id===b.dataset.cp);if(v)copyText(v.code)});
-  qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked');draw()}));
+  qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
+  qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
+  qsa('[data-resetm]').forEach(b=>b.onclick=()=>{const u2=USERS().find(x=>x.mobile===b.dataset.resetm);if(u2)openResetPwModal(u2,RESETS().find(r=>r.mobile===u2.mobile&&r.status==='pending')?.id)});
   qsa('[data-tg]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.tg);
    if(t.id===me.id)return toast("You can't disable yourself",'err');
-   dbUpdate('users',t.id,{active:t.active===false});draw()});
+   dbUpdate('users',t.id,{active:t.active===false})});
   qsa('[data-del]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.del);
    if(t.id===me.id)return toast("You can't delete yourself",'err');
    if(t.role==='super'&&USERS().filter(x=>x.role==='super'&&x.active!==false).length<=1)return toast('Last super admin cannot be removed','err');
-   confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);toast('Account removed');draw()})});
-  qsa('[data-reset]').forEach(b=>b.onclick=()=>{const r=RESETS().find(x=>x.id===b.dataset.reset);openResetPwModal(USERS().find(x=>x.id===r.userId),r.id)})};
+   confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
-function openInviteModal(){const me=session();
+async function openInviteModal(){const me=S.me;
  const roles=me.role==='super'?[['staff','Staff'],['admin','Admin']]:[['staff','Staff']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ivForm">
@@ -1377,15 +1471,16 @@ function openInviteModal(){const me=session();
   <div class="muted" style="font-size:12.5px;margin-bottom:14px">One-time use. Send the code to one person only — they open the site, tap <b>“Invited? Join with a code”</b>, enter it, and create their own mobile + password.</div>
   <button class="btn btn-primary" style="width:100%">Generate code</button></form></div>`);
  $('#ivForm').onsubmit=e=>{e.preventDefault();
-  const v=dbAdd('invites',{code:genInviteCode(),role:$('#iv-role').value,days:+$('#iv-days').value,createdTs:Date.now(),used:false});
+  const code=genInviteCode();
+  dbAdd('invites',{code,role:$('#iv-role').value,days:+$('#iv-days').value,createdTs:Date.now(),used:false});
   openModal(`<div class="mhead"><h3>Invite created</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
   <div class="mbody" style="text-align:center">
    <span class="lbl">Share this code privately</span>
-   <div class="mono" style="font:700 30px var(--mono);letter-spacing:.08em;margin:12px 0">${esc(v.code)}</div>
-   <p class="muted" style="font-size:13px">Role: <b>${esc(v.role)}</b> · expires in ${v.days} days · one-time use.</p>
+   <div class="mono" style="font:700 30px var(--mono);letter-spacing:.08em;margin:12px 0">${esc(code)}</div>
+   <p class="muted" style="font-size:13px">Role: <b>${esc($('#iv-role').value)}</b> · expires in ${$('#iv-days').value} days · one-time use.</p>
    <button class="btn btn-primary" style="width:100%;margin-top:8px" id="ivCopy">${ic('edit',16)}Copy code</button></div>`);
-  $('#ivCopy').onclick=()=>copyText(v.code)}}
-function openTeamModal(){const me=session();
+  $('#ivCopy').onclick=()=>copyText(code)}}
+async function openTeamModal(){const me=S.me;
  const roles=me.role==='super'?[['staff','Staff'],['admin','Admin'],['super','Super admin']]:[['staff','Staff']];
  openModal(`<div class="mhead"><h3>Add staff / admin directly</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="nuForm">
@@ -1393,43 +1488,66 @@ function openTeamModal(){const me=session();
   <div class="frow"><div class="field"><label class="fl">Mobile (login ID)</label><input class="in" id="nu-user" required inputmode="numeric" placeholder="10-digit mobile"></div>
   <div class="field"><label class="fl">Role</label><select class="sel" id="nu-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div></div>
   <div class="field"><label class="fl">Password</label><input class="in" id="nu-pass" type="password" required></div>
-  <div class="muted" style="font-size:12px;margin-bottom:14px">Use this when the person works on your shared device. For their own device, prefer an invite code.</div>
+  <div id="nuErr" class="notice red" style="display:none"></div>
+  <div class="muted" style="font-size:12px;margin-bottom:14px">Share the mobile + password privately. Prefer an invite code when the person uses their own device.</div>
   <button class="btn btn-primary" style="width:100%">Create account</button></form></div>`);
- $('#nuForm').onsubmit=async e=>{e.preventDefault();const mob=normMobile($('#nu-user').value);
-  if(!validMobile(mob))return toast('Enter a valid 10-digit mobile number','err');
-  if(USERS().some(x=>x.mobile===mob))return toast('Mobile number already registered','err');
-  await dbAdd('users',{name:$('#nu-name').value.trim(),mobile:mob,pw:await hashPw($('#nu-pass').value),role:$('#nu-role').value,active:true});
-  closeModal();toast('Account created');route()}}
-function openCustomerModal(){openModal(`<div class="mhead"><h3>Create customer login</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+ $('#nuForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#nuErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const mob=normMobile($('#nu-user').value),name=$('#nu-name').value.trim(),pw=$('#nu-pass').value,role=$('#nu-role').value;
+  if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
+  if(pw.length<4)return err('Password too short');
+  if(role==='super'&&me.role!=='super')return err('Only a super admin can create another super admin');
+  try{
+   const newUid=await createAuthUser(mobileToEmail(mob),pw);
+   const batch=DB.batch();
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
+   await batch.commit();
+   closeModal();toast('Account created — ID: '+mob);route()}
+  catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
+async function openCustomerModal(){
+ openModal(`<div class="mhead"><h3>Create customer login</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ncForm">
   <div class="field"><label class="fl">Customer name</label><input class="in" id="nc-name" required></div>
   <div class="frow"><div class="field"><label class="fl">Mobile (login ID)</label><input class="in" id="nc-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
   <div class="field"><label class="fl">Password</label><input class="in" id="nc-pass" type="password" required></div></div>
   <div class="field"><label class="fl">Link to ledger party</label><select class="sel" id="nc-party"><option value="__new">— Create new party with this name —</option>${PARTIES().filter(p=>p.type!=='supplier').map(p=>`<option value="${p.id}">${esc(p.name)}${p.phone?' · '+esc(p.phone):''}</option>`).join('')}</select></div>
-  <div class="muted" style="font-size:12px;margin-bottom:14px">Share the mobile + password privately. The customer signs in on the same site and can browse, cart and place orders.</div>
+  <div id="ncErr" class="notice red" style="display:none"></div>
+  <div class="muted" style="font-size:12px;margin-bottom:14px">The customer signs in on the same site with this mobile number and can browse, cart and place orders. Orders reach you live.</div>
   <button class="btn btn-primary" style="width:100%">Create customer login</button></form></div>`);
- $('#ncForm').onsubmit=async e=>{e.preventDefault();const mob=normMobile($('#nc-mob').value),name=$('#nc-name').value.trim();
-  if(!validMobile(mob))return toast('Enter a valid 10-digit mobile number','err');
-  if(USERS().some(x=>x.mobile===mob))return toast('Mobile number already registered','err');
-  let pid=$('#nc-party').value;
-  if(pid==='__new'){pid=dbAdd('parties',{name,type:'customer',phone:mob,address:'',openingBalance:0,openingType:'dr'}).id}
-  await dbAdd('users',{name,mobile:mob,pw:await hashPw($('#nc-pass').value),role:'customer',partyId:pid,active:true});
-  closeModal();toast('Customer login created — ID: '+mob);route()}}
+ $('#ncForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#ncErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const mob=normMobile($('#nc-mob').value),name=$('#nc-name').value.trim(),pw=$('#nc-pass').value;
+  if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
+  if(pw.length<4)return err('Password too short');
+  try{
+   let pid=$('#nc-party').value;
+   if(pid==='__new'){const p=dbAdd('parties',{name,type:'customer',phone:mob,address:'',openingBalance:0,openingType:'dr'});pid=p.id}
+   const newUid=await createAuthUser(mobileToEmail(mob),pw);
+   const batch=DB.batch();
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role:'customer',partyId:pid,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
+   await batch.commit();
+   closeModal();toast('Customer login created — ID: '+mob);route()}
+  catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
 function openResetPwModal(t,reqId){if(!t)return;
  openModal(`<div class="mhead"><h3>Reset password — ${esc(t.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="rpForm">
-  <p class="muted" style="font-size:13px;margin-bottom:14px">Set a new password and share it with ${esc(t.name)} directly (call / WhatsApp on <b class="mono">${esc(t.mobile||'—')}</b>).</p>
+  <p class="muted" style="font-size:13px;margin-bottom:14px">Set a new password, then share it with ${esc(t.name)} directly (call / WhatsApp on <b class="mono">${esc(t.mobile||'—')}</b>). Their next sign-in uses the new password on any device.</p>
   <div class="field"><label class="fl">New password</label><input class="in" id="rp1" type="password" required></div>
-  <button class="btn btn-primary" style="width:100%">Set password</button></form></div>`);
- $('#rpForm').onsubmit=async e=>{e.preventDefault();
-  if($('#rp1').value.length<4)return toast('Password too short','err');
-  dbUpdate('users',t.id,{pw:await hashPw($('#rp1').value)});
-  if(reqId)dbUpdate('pwResets',reqId,{status:'done',doneTs:Date.now()});
-  closeModal();toast('Password reset for '+t.name);route()}}
+  <div id="rpErr" class="notice red" style="display:none"></div>
+  <button class="btn btn-primary" style="width:100%" id="rpBtn">Set password</button></form></div>`);
+ $('#rpForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#rpErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const pw=$('#rp1').value;if(pw.length<4)return err('Password too short');
+  const b=$('#rpBtn');b.disabled=true;
+  try{await adminResetPw(t,pw);
+   if(reqId)dbUpdate('pwResets',reqId,{status:'done',doneTs:Date.now()});
+   closeModal();toast('Password reset for '+t.name)}
+  catch(ex){b.disabled=false;err(ex.code==='auth/email-already-in-use'?'This mobile already has an active account — try disabling/removing it first.':'Reset failed: '+ex.code)}}}
 
 /* ============ settings ============ */
-function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u=session();
- V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Settings</div><div class="psub">Business identity & data</div></div></div>
+async function bulkWrite(c,docs){for(let i=0;i<docs.length;i+=400){const b=DB.batch();docs.slice(i,i+400).forEach(d=>b.set(DB.collection(c).doc(d.id||uid()),d));await b.commit()}}
+async function bulkDelete(c,ids){for(let i=0;i<ids.length;i+=400){const b=DB.batch();ids.slice(i,i+400).forEach(id=>b.delete(DB.collection(c).doc(id)));await b.commit()}}
+function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u=S.me;
+ V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Settings</div><div class="psub">Business identity & data · everything syncs live</div></div></div>
  <div class="grid2">
  <div class="card"><div class="cardhead"><span class="lbl">Business</span></div><div class="cardpad"><form id="stForm">
    <div class="field"><label class="fl">Business name</label><input class="in" id="st-biz" value="${esc(s.businessName)}" required></div>
@@ -1440,7 +1558,7 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
    <button class="btn btn-primary" style="width:100%">Save settings</button></form></div></div>
  <div>
    <div class="card" style="margin-bottom:14px"><div class="cardhead"><span class="lbl">Data & backup</span></div><div class="cardpad">
-     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in this browser's storage. Export regularly and keep a copy safe — importing on another device moves everything there.</p>
+     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in Google Firestore — safe from device loss. Export a JSON backup for your records, or import one (e.g. from the old offline version — imported accounts need a password reset to activate sign-in).</p>
      <div style="display:flex;gap:10px;flex-wrap:wrap">
        <button class="btn btn-ghost" id="expBtn">${ic('down',16)}Export backup</button>
        <button class="btn btn-ghost" id="impBtn">${ic('up',16)}Import backup</button>
@@ -1456,59 +1574,81 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
      <div class="lgrow" style="border:0"><span class="ld"><b>Stock value</b><span>weighted average</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600;color:var(--green)">${money(sum(stockRows(),r=>r.value))}</span></div>
    </div></div>
  </div></div>`;
- $('#stForm').onsubmit=e=>{e.preventDefault();const n=SET();n.businessName=$('#st-biz').value.trim()||n.businessName;n.currency=$('#st-cur').value.trim()||'₹';n.currencyWord=$('#st-cw').value.trim();n.phone=$('#st-ph').value.trim();n.address=$('#st-ad').value.trim();saveSet(n);toast('Settings saved');renderShell()};
- $('#expBtn').onclick=()=>{const data={};ALLKEYS.forEach(k=>data[k]=LS.get(k,[]));
+ $('#stForm').onsubmit=e=>{e.preventDefault();const n=SET();n.businessName=$('#st-biz').value.trim()||n.businessName;n.currency=$('#st-cur').value.trim()||'₹';n.currencyWord=$('#st-cw').value.trim();n.phone=$('#st-ph').value.trim();n.address=$('#st-ad').value.trim();saveSet(n);toast('Settings saved — live on all devices')};
+ $('#expBtn').onclick=()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES()};
   const b=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='munshi-backup-'+todayISO()+'.json';a.click();toast('Backup downloaded')};
  $('#impBtn').onclick=()=>$('#impFile').click();
  $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
-  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d.settings||!d.users)throw 0;
-   confirmBox('Import backup?','This replaces ALL current data with the backup file.',()=>{ALLKEYS.forEach(k=>LS.set(k,d[k]||[]));_SET=null;LS.del('session');location.hash='#/login';renderAuth();toast('Backup imported — please sign in')})}
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d.settings)throw 0;
+   confirmBox('Import backup?','Data will be added/replaced in your Firestore. This cannot be undone.',async()=>{
+    toast('Importing… this may take a moment');
+    const cfg={businessName:d.settings.businessName||'Munshi Traders',currency:d.settings.currency||'₹',currencyWord:d.settings.currencyWord||'',phone:d.settings.phone||'',address:d.settings.address||''};
+    await DB.collection('settings').doc('config').set(cfg);
+    if(d.settings.counters)await DB.collection('settings').doc('counters').set(d.settings.counters);
+    for(const c of ['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites']){
+     if(Array.isArray(d[c])&&d[c].length)await bulkWrite(c,d[c])}
+    for(const usr of (d.users||[])){if(usr.mobile)await DB.collection('logins').doc(String(usr.mobile)).set({email:mobileToEmail(String(usr.mobile))},{merge:true})}
+    toast('Import complete — reset passwords in Users to activate sign-ins')})}
   catch(err){toast('Not a valid Munshi backup','err')}};rd.readAsText(f)};
- $('#seedBtn').onclick=()=>confirmBox('Load sample data?','Adds a full demo month of transactions to your books.',async()=>{await seedDemo();toast('Sample data loaded');route()});
- const wb=$('#wipeBtn');if(wb)wb.onclick=()=>confirmBox('Wipe all data?','Every record in this browser will be permanently deleted.',()=>{ALLKEYS.concat(['session']).forEach(k=>LS.del(k));_SET=null;S.setupOK=false;location.hash='#/setup';renderSetup()})}
+ $('#seedBtn').onclick=()=>confirmBox('Load sample data?','Adds a demo month of transactions, a demo customer login (99999 00000 / 1234) and two sample orders.',async()=>{await seedDemo();toast('Sample data loaded');route()});
+ const wb=$('#wipeBtn');if(wb)wb.onclick=()=>confirmBox('Wipe all data?','Every record in Firestore will be permanently deleted. Export a backup first!',async()=>{
+  toast('Wiping…');
+  for(const c of COLLECTION_KEYS)await bulkDelete(c,(state[c]||[]).map(x=>x.id));
+  await DB.collection('settings').doc('config').delete().catch(()=>{});
+  await DB.collection('settings').doc('counters').delete().catch(()=>{});
+  toast('Wiped — sign in again and run setup');logout()})}
 
 /* ============ sample data ============ */
 async function seedDemo(){
  let _s=987654321;const rnd=()=>{_s=(_s*1103515245+12345)%2147483648;return _s/2147483648};const ri=(a,b)=>a+Math.floor(rnd()*(b-a+1));const pick=a=>a[Math.floor(rnd()*a.length)];
- const cats=['Chargers','Cables','Earphones & Buds','Power Banks','Cases & Covers','Screen Guards','Mounts & Holders','Memory Cards'].map(n=>dbAdd('categories',{name:n}));
- const brands=['boAt','Portronics','Samsung','JBL','Wecool','Spigen','SanDisk','Mi'].map(n=>dbAdd('brands',{name:n}));
+ const cats=['Chargers','Cables','Earphones & Buds','Power Banks','Cases & Covers','Screen Guards','Mounts & Holders','Memory Cards'].map(n=>({id:uid(),name:n}));
+ const brands=['boAt','Portronics','Samsung','JBL','Wecool','Spigen','SanDisk','Mi'].map(n=>({id:uid(),name:n}));
  const cid=n=>cats.find(c=>c.name===n).id,bid=n=>brands.find(b=>b.name===n).id;
  const IT=[['boAt 33W Type-C Charger','Chargers','boAt',415,599,60,10],['Samsung 25W Adapter','Chargers','Samsung',820,1099,28,60],['Portronics Adapto 65W','Chargers','Portronics',1140,1499,25,10],['boAt Type-C Cable 1m','Cables','boAt',128,199,150,40],['Mi Braided USB-C 1.5m','Cables','Mi',158,249,120,30],['Samsung Data Cable','Cables','Samsung',105,175,140,30],['boAt Airdopes 141','Earphones & Buds','boAt',940,1299,55,15],['JBL Tune 125TWS','Earphones & Buds','JBL',2430,3299,26,50],['Wecool Mr.Bass Earbuds','Earphones & Buds','Wecool',660,999,44,12],['Mi 10000mAh Power Bank','Power Banks','Mi',975,1399,32,50],['boAt 20000mAh Power Bank','Power Banks','boAt',1630,2299,27,10],['Spigen Rugged Armor iPhone 15','Cases & Covers','Spigen',630,999,38,12],['Silicone Case Redmi Note 13','Cases & Covers','Wecool',82,149,200,30],['Clear Case Galaxy S23','Cases & Covers','Wecool',68,129,180,30],['Tempered Glass iPhone 15','Screen Guards','Wecool',44,99,300,50],['Tempered Glass Redmi Note 13','Screen Guards','Wecool',36,89,320,50],['Portronics MoBike Mount','Mounts & Holders','Portronics',375,599,40,10],['Magnet Dash Mount','Mounts & Holders','Wecool',148,249,58,12],['SanDisk 64GB microSD','Memory Cards','SanDisk',425,599,70,15],['SanDisk 128GB microSD','Memory Cards','SanDisk',810,1099,46,12]];
- const items=IT.map(x=>dbAdd('items',{name:x[0],sku:'',categoryId:cid(x[1]),brandId:bid(x[2]),unit:'Pcs',openingStock:x[5],openingRate:x[3],purchaseRate:x[3],saleRate:x[4],low:x[6]}));
- const customers=[['Sharma Mobile Centre','9832045510',8500],['Gupta Telecom','9811223344',0],['Sky Communications','9008877665',15200],['Mobile Point','7894561230',0],['Rajesh Accessories','9988776655',4300],['Digital World','9765432101',0]].map(x=>dbAdd('parties',{name:x[0],type:'customer',phone:x[1],address:'',openingBalance:x[2],openingType:'dr',openingDate:addDays(todayISO(),-45)}));
- const suppliers=[['Wecool Distributors','9811000011',12000],['Sound Source Trading','9822000022',0],['Portronics Depot','9833000033',8600],['Samsung Zone','9844000044',0],['Global Accessories Co.','9855000055',0]].map(x=>dbAdd('parties',{name:x[0],type:'supplier',phone:x[1],address:'',openingBalance:x[2],openingType:'cr',openingDate:addDays(todayISO(),-45)}));
+ const items=IT.map(x=>({id:uid(),name:x[0],sku:'',categoryId:cid(x[1]),brandId:bid(x[2]),unit:'Pcs',openingStock:x[5],openingRate:x[3],purchaseRate:x[3],saleRate:x[4],low:x[6]}));
+ const customers=[['Sharma Mobile Centre','9832045510',8500],['Gupta Telecom','9811223344',0],['Sky Communications','9008877665',15200],['Mobile Point','7894561230',0],['Rajesh Accessories','9988776655',4300],['Digital World','9765432101',0]].map(x=>({id:uid(),name:x[0],type:'customer',phone:x[1],address:'',openingBalance:x[2],openingType:'dr',openingDate:addDays(todayISO(),-45)}));
+ const suppliers=[['Wecool Distributors','9811000011',12000],['Sound Source Trading','9822000022',0],['Portronics Depot','9833000033',8600],['Samsung Zone','9844000044',0],['Global Accessories Co.','9855000055',0]].map(x=>({id:uid(),name:x[0],type:'supplier',phone:x[1],address:'',openingBalance:x[2],openingType:'cr',openingDate:addDays(todayISO(),-45)}));
+ await bulkWrite('categories',cats);await bulkWrite('brands',brands);await bulkWrite('items',items);
+ await bulkWrite('parties',customers.concat(suppliers));
  const custIds=customers.map(c=>c.id),supIds=suppliers.map(c=>c.id),modes=['Cash','UPI','Bank','Card'];
  const demoParty=customers[1];
- const demoCust=await dbAdd('users',{name:'Gupta Telecom (Demo)',mobile:'9999900000',pw:await hashPw('1234'),role:'customer',partyId:demoParty.id,active:true});
+ const demoUid=await createAuthUser('9999900000@munshi.app','1234');
+ const db2=DB.batch();
+ db2.set(DB.collection('users').doc(demoUid),{name:'Gupta Telecom (Demo)',mobile:'9999900000',role:'customer',partyId:demoParty.id,active:true,created:Date.now()});
+ db2.set(DB.collection('logins').doc('9999900000'),{email:'9999900000@munshi.app'});
+ await db2.commit();
+ const salesA=[],purchA=[],sretA=[],pretA=[],recA=[],payA=[],ordA=[];
  const mkOL=()=>{const lines=[],used=new Set();for(let k=0;k<ri(2,4);k++){const it=pick(items);if(used.has(it.id))continue;used.add(it.id);lines.push({itemId:it.id,qty:ri(2,8),rate:it.saleRate})}return lines};
  const l1=mkOL(),s1=sum(l1,x=>x.qty*x.rate);
- dbAdd('orders',{no:nextNo('ORD'),date:todayISO(),userId:demoCust.id,partyId:demoParty.id,lines:l1,subtotal:s1,total:s1,status:'new',note:'Please deliver before 6 pm',history:[{ts:Date.now()-36e5,status:'new',by:'Gupta Telecom'}],created:Date.now()-36e5});
+ ordA.push({id:uid(),no:'ORD-0001',date:todayISO(),userId:demoUid,partyId:demoParty.id,lines:l1,subtotal:s1,total:s1,status:'new',note:'Please deliver before 6 pm',history:[{ts:Date.now()-36e5,status:'new',by:'Gupta Telecom'}],created:Date.now()-36e5});
  const l2=mkOL(),s2=sum(l2,x=>x.qty*x.rate);
- dbAdd('orders',{no:nextNo('ORD'),date:addDays(todayISO(),-2),userId:demoCust.id,partyId:demoParty.id,lines:l2,subtotal:s2,total:s2,status:'confirmed',note:'',history:[{ts:Date.now()-2*864e5,status:'new'},{ts:Date.now()-864e5,status:'confirmed',by:'Admin'}],created:Date.now()-2*864e5});
+ ordA.push({id:uid(),no:'ORD-0002',date:addDays(todayISO(),-2),userId:demoUid,partyId:demoParty.id,lines:l2,subtotal:s2,total:s2,status:'confirmed',note:'',history:[{ts:Date.now()-2*864e5,status:'new'},{ts:Date.now()-864e5,status:'confirmed',by:'Admin'}],created:Date.now()-2*864e5});
+ let si=0,pi=0,sri=0,pri=0;
  for(let i=34;i>=0;i--){const date=addDays(todayISO(),-i),created=Date.now()-i*864e5+ri(9,19)*36e5;
   if(i%4===1){const lines=[],used=new Set();for(let k=0;k<ri(3,6);k++){const it=pick(items);if(used.has(it.id))continue;used.add(it.id);lines.push({itemId:it.id,qty:ri(10,40),rate:it.purchaseRate})}
    if(lines.length){const sub=sum(lines,l=>l.qty*l.rate),r=rnd(),paid=r<0.55?sub:r<0.8?Math.round(sub*0.5/100)*100:0;
-    dbAdd('purchases',{no:nextNo('PI'),date,partyId:pick(supIds),lines,subtotal:sub,total:sub,paid,payMode:paid?pick(modes):'Credit',note:'',created})}}
+    purchA.push({id:uid(),no:'PI-'+String(++pi).padStart(4,'0'),date,partyId:pick(supIds),lines,subtotal:sub,total:sub,paid,payMode:paid?pick(modes):'Credit',note:'',created})}}
   for(let s=0;s<ri(1,3);s++){const lines=[],used=new Set();for(let k=0;k<ri(1,4);k++){const it=pick(items);if(used.has(it.id))continue;used.add(it.id);lines.push({itemId:it.id,qty:ri(1,6),rate:it.saleRate})}
    if(!lines.length)continue;const sub=sum(lines,l=>l.qty*l.rate),disc=rnd()<0.2?ri(20,150):0,total=sub-disc,r=rnd(),paid=r<0.6?total:r<0.8?Math.round(total*ri(30,70)/100/10)*10:0;
-   dbAdd('sales',{no:nextNo('SI'),date,partyId:pick(custIds),lines,subtotal:sub,discount:disc,total,paid,payMode:paid?pick(modes):'Credit',note:'',created:created+s*6e4})}
-  if(rnd()<0.5)dbAdd('receipts',{date,partyId:pick(custIds),amount:ri(20,120)*500,mode:pick(modes),note:'Collection round',created:created+3e5});
-  if(rnd()<0.3)dbAdd('payments',{date,partyId:pick(supIds),amount:ri(30,180)*500,mode:pick(modes),note:'',created:created+4e5});
+   salesA.push({id:uid(),no:'SI-'+String(++si).padStart(4,'0'),date,partyId:pick(custIds),lines,subtotal:sub,discount:disc,total,paid,payMode:paid?pick(modes):'Credit',note:'',created:created+s*6e4})}
+  if(rnd()<0.5)recA.push({id:uid(),date,partyId:pick(custIds),amount:ri(20,120)*500,mode:pick(modes),note:'Collection round',created:created+3e5});
+  if(rnd()<0.3)payA.push({id:uid(),date,partyId:pick(supIds),amount:ri(30,180)*500,mode:pick(modes),note:'',created:created+4e5});
   if(rnd()<0.14){const lines=[];for(let k=0;k<ri(1,2);k++){const it=pick(items);lines.push({itemId:it.id,qty:ri(1,2),rate:it.saleRate})}
    const tv=sum(lines,l=>l.qty*l.rate),cash=rnd()<0.4;
-   dbAdd('saleReturns',{no:nextNo('SR'),date,partyId:pick(custIds),lines,subtotal:tv,total:tv,goodsBack:rnd()<0.8,settle:cash?'cash':'credit',cashAmount:cash?tv:0,payMode:cash?pick(modes):'',note:'',created:created+5e5})}
+   sretA.push({id:uid(),no:'SR-'+String(++sri).padStart(4,'0'),date,partyId:pick(custIds),lines,subtotal:tv,total:tv,goodsBack:rnd()<0.8,settle:cash?'cash':'credit',cashAmount:cash?tv:0,payMode:cash?pick(modes):'',note:'',created:created+5e5})}
   if(rnd()<0.09){const lines=[];for(let k=0;k<ri(1,2);k++){const it=pick(items);lines.push({itemId:it.id,qty:ri(2,5),rate:it.purchaseRate})}
    const tv=sum(lines,l=>l.qty*l.rate),cash=rnd()<0.35;
-   dbAdd('purchaseReturns',{no:nextNo('PR'),date,partyId:pick(supIds),lines,subtotal:tv,total:tv,goodsBack:true,settle:cash?'cash':'credit',cashAmount:cash?tv:0,payMode:cash?pick(modes):'',note:'',created:created+6e5})}
- }
- dbAdd('stockAdj',{itemId:items[6].id,delta:-2,rate:0,reason:'Damaged / dead stock',date:addDays(todayISO(),-3),by:'Admin',created:Date.now()-3*864e5});
- const st=SET();st.seeded=true;st.welcomed=true;saveSet(st)}
+   pretA.push({id:uid(),no:'PR-'+String(++pri).padStart(4,'0'),date,partyId:pick(supIds),lines,subtotal:tv,total:tv,goodsBack:true,settle:cash?'cash':'credit',cashAmount:cash?tv:0,payMode:cash?pick(modes):'',note:'',created:created+6e5})}}
+ await bulkWrite('sales',salesA);await bulkWrite('purchases',purchA);await bulkWrite('saleReturns',sretA);await bulkWrite('purchaseReturns',pretA);
+ await bulkWrite('receipts',recA);await bulkWrite('payments',payA);await bulkWrite('orders',ordA);
+ await DB.collection('settings').doc('counters').set({SI:si,PI:pi,SR:sri,PR:pri,ORD:ordA.length});
+ await DB.collection('stockAdj').add({itemId:items[6].id,delta:-2,rate:0,reason:'Damaged / dead stock',date:addDays(todayISO(),-3),by:S.me.name,created:Date.now()-3*864e5});
+ const st=SET();saveSet(Object.assign({},st,{welcomed:true}))}
 
 /* ============ router & boot ============ */
 function route(){
- const raw=location.hash||'',p=raw.replace(/^#\//,'').split('/').filter(Boolean),u=session();
- if(p[0]==='signup'){go('login');return}
- if(p[0]==='login'){if(u){go(u.role==='customer'?'shop':'dash');return}renderAuth();return}
+ const raw=location.hash||'',p=raw.replace(/^#\//,'').split('/').filter(Boolean),u=S.me;
+ if(p[0]==='login'){if(u){go(u.role==='customer'?'shop':'dash');return}renderLogin();return}
  if(p[0]==='setup'){if(u){go(u.role==='customer'?'shop':'dash');return}renderSetup();return}
  if(p[0]==='join'){if(u){go(u.role==='customer'?'shop':'dash');return}renderJoin();return}
  if(!u){go('login');return}
@@ -1547,11 +1687,28 @@ function route(){
 window.addEventListener('hashchange',route);
 window.closeModal=closeModal;
 (function boot(){
- const us=LS.get('users',[]);let ch=false;
- us.forEach(x=>{if(!x.mobile){x.mobile=String(x.username||'').replace(/\D/g,'');ch=true}});
- if(ch)LS.set('users',us);
- if(!location.hash)location.hash='#/login';
- route()})();
+ if(!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.startsWith('PASTE')){renderConfigNeeded();return}
+ firebase.initializeApp(FIREBASE_CONFIG);
+ auth=firebase.auth();DB=firebase.firestore();
+ try{DB.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
+ auth.onAuthStateChanged(async fu=>{
+  S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];
+  if(!fu){S.me=null;S.booting=false;route();return}
+  S.booting=true;showLoading('Loading your live books…');
+  try{
+   const ud=await DB.collection('users').doc(fu.uid).get();
+   if(!ud.exists){await auth.signOut();S.booting=false;showLoading('Account data missing — please sign in again.');setTimeout(()=>route(),1600);return}
+   const me=Object.assign({id:fu.uid},ud.data());
+   if(me.active===false){await auth.signOut();S.booting=false;showLoading('This account is disabled. Contact your admin.');setTimeout(()=>route(),1600);return}
+   S.me=me;
+   subscribeAll(me);
+   await new Promise(r=>setTimeout(r,450));
+   S.booting=false;renderShell();
+   const cur=(location.hash||'').replace(/^#\//,'').split('/')[0];
+   if(['login','setup','join'].includes(cur)||!cur)go(me.role==='customer'?'shop':'dash');else route();
+  }catch(e){console.error(e);S.booting=false;showLoading('Connection problem ('+(e.code||e.message)+') — check internet and refresh.')}
+ });
+})();
 </script>
 </body>
 </html>
