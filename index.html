@@ -746,16 +746,88 @@ function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalan
 
 /* ============ dashboard ============ */
 function countUp(el,target){const t0=performance.now(),dur=850;const step=t=>{const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=money(target*e);if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
+/* ============ dashboard helpers ============ */
+function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
+ const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
+ SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
+ PURCHASES().forEach(d=>{add(d.partyId,-(+d.total));if(+d.paid)add(d.partyId,+d.paid)});
+ SRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,-(+d.total))});
+ PRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,+d.total)});
+ RECEIPTS().forEach(r=>add(r.partyId,-(+r.amount)));
+ PAYMENTS().forEach(r=>add(r.partyId,+r.amount));
+ return m}
+function dashCheckCard(){if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
+ const dc=S.dashCheck;
+ const chips=[['today','Today'],['7d','7 days'],['month','This month'],['lmonth','Last month'],['30d','30 days'],['all','All']];
+ return `<div class="card" style="margin-bottom:14px">
+  <div class="cardhead"><span class="lbl">Period check · sales · purchase · profit</span><span class="muted mono" style="font-size:11px" id="dcHeadDates">${fmtDate(dc.from)} → ${fmtDate(dc.to)}</span></div>
+  <div class="cardpad">
+   <div class="tabs" style="margin-bottom:6px">${chips.map(c=>`<button class="chip ${dc.preset===c[0]?'on':''}" data-dc="${c[0]}">${c[1]}</button>`).join('')}</div>
+   <div class="rdates" style="margin-top:2px;margin-bottom:12px">
+     <input type="date" class="in" id="dcFrom" value="${dc.from}">
+     <span class="muted">→</span>
+     <input type="date" class="in" id="dcTo" value="${dc.to}">
+   </div>
+   <div id="dcBody"></div>
+  </div></div>`}
+function drawCheckBody(){const dc=S.dashCheck;let f=dc.from||'2000-01-01',t=dc.to||todayISO();
+ if(f>t){const x=f;f=t;t=x}
+ const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
+ const purs=PURCHASES().filter(d=>inR(d.date,f,t)),prets=PRET().filter(d=>inR(d.date,f,t));
+ const gS=sum(invs,d=>d.total),rS=sum(rets,d=>d.total),netS=gS-rS;
+ const gP=sum(purs,d=>d.total),rP=sum(prets,d=>d.total),netP=gP-rP;
+ const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
+ let rev=0,cogs=0;
+ invs.forEach(d=>{const sub=docSub(d);d.lines.forEach(l=>{const g=l.qty*l.rate,net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=l.qty*AC(l.itemId)})});
+ rets.forEach(rt=>{rt.lines.forEach(l=>{const c=rt.goodsBack!==false?l.qty*AC(l.itemId):0;rev-=l.qty*l.rate;cogs-=c})});
+ const profit=rev-cogs,mg=rev>0.004?(profit/rev*100):0;
+ const collected=sum(invs,d=>+d.paid)+sum(RECEIPTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
+ const paidOut=sum(purs,d=>+d.paid)+sum(PAYMENTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
+ const el=$('#dcBody');if(!el)return;
+ el.innerHTML=`<div class="sumrow" style="margin-bottom:10px">
+  ${sumTile('Net sales',money(netS),'var(--green)')}
+  ${sumTile('Net purchases',money(netP),'var(--red)')}
+  ${sumTile('Gross profit',money(profit),profit>=0?'var(--green)':'var(--red)')}
+  ${sumTile('Margin',rev>0.004?mg.toFixed(1)+'%':'—',profit>=0?'var(--green)':'var(--red)')}
+ </div>
+ <div style="border-top:1px dashed var(--line);padding-top:8px;max-width:560px">
+  <div class="trow"><span class="muted">Gross sales · ${invs.length} inv − returns · ${rets.length}</span><b>${money(gS)} − ${money(rS)}</b></div>
+  <div class="trow"><span class="muted">Purchases · ${purs.length} inv − returns · ${prets.length}</span><b>${money(gP)} − ${money(rP)}</b></div>
+  <div class="trow"><span class="muted">Collected in / Paid out</span><b>${money(collected)} / ${money(paidOut)}</b></div>
+  <div class="trow grand"><span>Sales − purchases (net trading)</span><b>${money(netS-netP)}</b></div>
+ </div>
+ ${(!invs.length&&!purs.length)?'<p class="muted" style="font-size:12px;margin-top:8px">No transactions in this period — pick another range above.</p>':''}`}
+function bindDashCheck(){
+ qsa('[data-dc]').forEach(b=>b.onclick=()=>{const[f,t]=presetRange(b.dataset.dc);
+  Object.assign(S.dashCheck,{preset:b.dataset.dc,from:f,to:t});
+  const hf=$('#dcHeadDates');if(hf)hf.textContent=fmtDate(f)+' → '+fmtDate(t);
+  const fi=$('#dcFrom'),ti=$('#dcTo');if(fi)fi.value=f;if(ti)ti.value=t;
+  qsa('[data-dc]').forEach(x=>x.classList.toggle('on',x.dataset.dc===b.dataset.dc));
+  drawCheckBody()});
+ const fi=$('#dcFrom'),ti=$('#dcTo');
+ const syncHead=()=>{const hf=$('#dcHeadDates');if(hf)hf.textContent=fmtDate(S.dashCheck.from)+' → '+fmtDate(S.dashCheck.to)};
+ if(fi)fi.onchange=()=>{S.dashCheck.from=fi.value||'2000-01-01';S.dashCheck.preset='custom';qsa('[data-dc]').forEach(x=>x.classList.remove('on'));syncHead();drawCheckBody()};
+ if(ti)ti.onchange=()=>{S.dashCheck.to=ti.value||todayISO();S.dashCheck.preset='custom';qsa('[data-dc]').forEach(x=>x.classList.remove('on'));syncHead();drawCheckBody()};
+ drawCheckBody()}
+
+/* ============ dashboard ============ */
+function countUp(el,target){const t0=performance.now(),dur=850;const step=t=>{const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=money(target*e);if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
 function vDash(){
  setTop('Dashboard');setActiveNav('dash');
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
+ if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
+ const ms=monthStart(t);
+ const bm=balancesMap();let recv=0,pay=0;
+ Object.values(bm).forEach(b=>{if(b>0.004)recv+=b;else if(b<-0.004)pay+=-b});
+ const mS=SALES().filter(d=>d.date>=ms),mP=PURCHASES().filter(d=>d.date>=ms);
+ const mSales=sum(mS,d=>d.total),mPur=sum(mP,d=>d.total);
  const daySales=sum(SALES().filter(d=>d.date===t),d=>d.total),yS=sum(SALES().filter(d=>d.date===y),d=>d.total);
  const dayPur=sum(PURCHASES().filter(d=>d.date===t),d=>d.total),yP=sum(PURCHASES().filter(d=>d.date===y),d=>d.total);
- const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(SALES().filter(d=>d.date===t),d=>d.paid);
+ const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(SALES().filter(d=>d.date===t),d=>+d.paid);
  const newOrd=ORDERS().filter(o=>o.status==='new').length;
  const isEmpty=!SALES().length&&!PURCHASES().length&&!RECEIPTS().length;
  const low=stockRows().filter(r=>r.qty<=(+r.it.low||10)).sort((a,b)=>a.qty-b.qty).slice(0,6);
- const ms=monthStart(t);const tl=groupBy(saleLinesOf(SALES().filter(d=>d.date>=ms)),'itemId');
+ const tl=groupBy(saleLinesOf(mS),'itemId');
  const top=Object.keys(tl).map(id=>({id,net:sum(tl[id],r=>r.net),qty:sum(tl[id],r=>r.qty)})).sort((a,b)=>b.net-a.net).slice(0,5);
  const maxTop=top[0]?top[0].net:1;
  const feed=[...SALES().map(d=>({...d,_t:'sale'})),...PURCHASES().map(d=>({...d,_t:'purchase'})),...SRET().map(d=>({...d,_t:'saleReturn'})),...PRET().map(d=>({...d,_t:'purchaseReturn'})),...RECEIPTS().map(d=>({...d,_t:'receipt'})),...PAYMENTS().map(d=>({...d,_t:'payment'})),...ORDERS().filter(o=>o.status==='new').map(d=>({...d,_t:'orderNew'}))].sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,8);
@@ -766,15 +838,22 @@ function vDash(){
  <div class="pagehead" style="margin-bottom:12px"><div><span class="lbl">${esc(s.businessName)}</span><div class="ptitle">${greet}, ${esc(u.name.split(' ')[0])}</div><div class="psub">${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>${newOrd?`<a class="btn btn-primary" href="#/orders">${ic('order',16)}${newOrd} new order${newOrd>1?'s':''}</a>`:''}</div>
  <div class="hr2" style="max-width:220px"></div>
  <div class="kpis">
+   <div class="kpi" data-go="parties" style="cursor:pointer"><span class="lbl">Receivable</span><div class="kpiV" data-v="${recv}" style="color:var(--green)">0</div><div class="kpiD">customers owe you</div></div>
+   <div class="kpi" data-go="parties" style="cursor:pointer"><span class="lbl">Payable</span><div class="kpiV" data-v="${pay}" style="color:var(--red)">0</div><div class="kpiD">you owe suppliers</div></div>
+   <div class="kpi tint-g"><span class="lbl">Sales · this month</span><div class="kpiV" data-v="${mSales}">0</div><div class="kpiD">${mS.length} invoices MTD</div></div>
+   <div class="kpi tint-r"><span class="lbl">Purchases · this month</span><div class="kpiV" data-v="${mPur}">0</div><div class="kpiD">${mP.length} invoices MTD</div></div>
+ </div>
+ <div class="kpis">
    <div class="kpi tint-g"><span class="lbl">Sales · today</span><div class="kpiV" data-v="${daySales}">0</div><div class="kpiD">${yS?((d)=>(d>=0?'+':'')+Math.round(d*100/yS)+'% vs yesterday')(daySales-yS):'—'}</div></div>
    <div class="kpi tint-r"><span class="lbl">Purchases · today</span><div class="kpiV" data-v="${dayPur}">0</div><div class="kpiD">${yP?((d)=>(d>=0?'+':'')+Math.round(d*100/yP)+'% vs yesterday')(dayPur-yP):'—'}</div></div>
-   <div class="kpi"><span class="lbl">Collected · today</span><div class="kpiV" data-v="${colT}">0</div><div class="kpiD">customers + refunds in</div></div>
-   <div class="kpi"><span class="lbl">Orders waiting</span><div class="kpiV">${newOrd}</div><div class="kpiD">from the customer portal</div></div>
+   <div class="kpi"><span class="lbl">Collected · today</span><div class="kpiV" data-v="${colT}">0</div><div class="kpiD">cash + with invoices</div></div>
+   <div class="kpi" data-go="orders" style="cursor:pointer"><span class="lbl">Orders waiting</span><div class="kpiV">${newOrd}</div><div class="kpiD">from the customer portal</div></div>
  </div>
  <div class="card" style="margin-bottom:14px">
    <div class="cardhead"><span class="lbl">Cash pulse · last 14 days</span><div class="legend"><span><i class="dot" style="background:var(--green)"></i>Sales</span><span><i class="dot" style="background:var(--red)"></i>Purchases</span></div></div>
    <div class="cardpad chartwrap" id="pulse">${pulseChart()}</div>
  </div>
+ ${dashCheckCard()}
  <div class="grid2">
    <div class="card"><div class="cardhead"><span class="lbl">Low stock</span><a class="btn btn-ghost btn-sm" href="#/r/stock">Valuation</a></div><div class="cardpad">
      ${low.length?low.map(r=>`<div class="lowrow"><div><b style="font:600 13.5px var(--disp)">${esc(r.it.name)}</b><div class="bsub">${esc(brandById(r.it.brandId)?.name||'')} · ${esc(catById(r.it.categoryId)?.name||'')}</div></div><span class="badge ${r.qty<=0?'b-red':'b-amber'}"><span class="mono">${r.qty}</span>&nbsp;left</span></div>`).join(''):`<div class="muted" style="text-align:center;padding:18px 0">${ic('check',20)} <span style="display:inline-block;vertical-align:middle">Everything above its alert level.</span></div>`}
@@ -790,7 +869,7 @@ function vDash(){
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
  const ob=$('#obSeed');if(ob)ob.onclick=()=>confirmBox('Load sample data?','Adds a demo month of transactions, a demo customer login (99999 00000 / 1234) and two sample orders to your books.',async()=>{await seedDemo();toast('Sample month loaded');route()});
  const of_=$('#obFresh');if(of_)of_.onclick=()=>{saveSet(Object.assign({},s,{welcomed:true}))};
- bindPulse();
+ bindPulse();bindDashCheck();
  let rt;window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{if(location.hash.includes('dash'))vDash()},250)};
 }
 function pulseChart(){
