@@ -33,8 +33,6 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .mono{font-family:var(--mono)}
 .muted{color:var(--ink2)}
 .lbl{font:600 10.5px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
-.hr2{border:0;border-top:3px solid var(--ink);position:relative;margin:10px 0 14px}
-.hr2:after{content:'';position:absolute;left:0;right:0;top:2px;border-top:1px solid var(--ink)}
 svg.ic{flex:none;display:block}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border-radius:10px;font:600 14px var(--disp);border:1px solid transparent;transition:.15s}
 .btn-primary{background:var(--green-ink);color:#F2F5EF}
@@ -258,6 +256,16 @@ body.locked{overflow:hidden}
 .qa.r .ic{color:var(--red)}
 .dashgrid{display:grid;gap:14px}
 @media(min-width:1024px){.dashgrid{grid-template-columns:1fr 1fr}}
+/* live suggestion combo */
+.combowrap{position:relative}
+.combo{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--line2);border-radius:10px;box-shadow:0 14px 34px -12px rgba(15,42,31,.35);z-index:80;max-height:262px;overflow:auto}
+.combo-it{padding:10px 12px;border-bottom:1px dashed var(--line);cursor:pointer}
+.combo-it:last-child{border-bottom:0}
+.combo-it:active{background:var(--paper)}
+.combo-it b{display:block;font:600 13.5px var(--disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.combo-it span{font:500 11px var(--mono);color:var(--ink2)}
+.combo-empty{padding:12px;color:var(--ink2);font-size:13px;text-align:center}
+.combo-sub{font:500 11px var(--mono);color:var(--ink2);margin-top:4px}
 #printArea{display:none}
 @media print{
   body.printing #app,body.printing #modalRoot,body.printing #toastRoot{display:none!important}
@@ -298,14 +306,13 @@ const FIREBASE_CONFIG={
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
 const SETUP_CODE='HARVINDER-BHATIA-1505';
-const APP_VERSION='v3.3';
+const APP_VERSION='v3.5';
 
 /* ============ utils (hardened) ============ */
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const sum=(a,f)=>(Array.isArray(a)?a:[]).reduce((x,y)=>x+(+f(y)||0),0);
-/* groupBy accepts a function OR a field name */
 function groupBy(a,f){const m={};if(!Array.isArray(a))return m;const get=(typeof f==='function')?f:(x=>x[f]);a.forEach(x=>{const k=get(x);(m[k]=m[k]||[]).push(x)});return m}
 const LINES=d=>Array.isArray(d&&d.lines)?d.lines:[];
 const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[],setupOK:false,dashCheck:null};
@@ -330,6 +337,29 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('Copied'),fb);else fb()}
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
+
+/* ============ live suggestion combo (replaces big dropdowns) ============ */
+function attachCombo(input,opts){
+ let box=null;
+ const close=()=>{if(box){box.remove();box=null}};
+ const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
+ const open=()=>{
+  const q=(input.value||'').trim().toLowerCase();
+  const pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
+  close();
+  if(!pool.length){
+   if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
+   return}
+  box=document.createElement('div');box.className='combo';
+  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
+  insert();
+  box.querySelectorAll('.combo-it').forEach(el=>{
+   el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
+ };
+ input.addEventListener('input',open);
+ input.addEventListener('focus',open);
+ input.addEventListener('blur',()=>setTimeout(close,160));
+}
 
 /* ============ visible error trap ============ */
 function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
@@ -376,10 +406,16 @@ async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
 function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
 function session(){return S.me}
 function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
-const RANK={customer:0,staff:1,admin:2,super:3};
+const RANK={customer:0,staff:1,company:1,admin:2,super:3};
 const isMgr=()=>S.me&&RANK[S.me.role]>=2;
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2,profit:u=>u&&RANK[u.role]>=2};
 function subscribeAll(me){
+ if(me.role==='company'){
+  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
+  ['items','categories','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(sub);
+  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
+  return}
  if(me.role==='customer'){
   const sub=(c,q)=>{let ref=DB.collection(c);if(q)ref=ref.where(q.f,'==',q.v);
    S.unsubs.push(ref.onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
@@ -510,14 +546,13 @@ const DOC={
  purchaseReturn:{coll:'purchaseReturns',no:'PR',title:'Purchase Return',one:'Purchase Return',partyKind:'supplier',rateKey:'purchaseRate',path:'purchase-returns',isReturn:true,cashLabel:'Receive cash now',color:'var(--amber)'}};
 const OSTAT={new:['New','b-amber'],confirmed:['Confirmed','b-gray'],delivered:['Delivered','b-green'],invoiced:['Invoiced','b-green'],cancelled:['Cancelled','b-red']};
 const ostBadge=s=>{const o=OSTAT[s]||['?','b-gray'];return `<span class="badge ${o[1]}">${o[0]}</span>`};
-/* level flag: 2 = admin & super only. Profit Analysis is admin-only. */
 const NAVG=[
  {g:'Operations',items:[['dash','Home','home'],['orders','Orders','order'],['sales','Sale Invoices','bag'],['purchases','Purchase Invoices','truck'],['sale-returns','Sale Returns','in'],['purchase-returns','Purchase Returns','out']]},
  {g:'Masters',items:[['parties','Parties','users'],['items','Items','box'],['categories','Categories','tag'],['brands','Brands','layers']]},
  {g:'Money',items:[['ledger','Ledger','book'],['collections','Collections','down'],['payments','Payments','up']]},
  {g:'Insights',items:[['r/stock','Stock Valuation','box'],['r/sales','Sales Analysis','chart'],['r/purchase','Purchase Analysis','chart'],['r/profit','Profit Analysis','in',2],['r/collection','Collection Analysis','down'],['r/payment','Payment Analysis','up']]},
  {g:'Admin',items:[['users','Users & Customers','user',2],['settings','Settings','gear',2]]}];
-const navItems=u=>NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
+const navItems=u=>u.role==='company'?[{g:'',items:[['dash','Home','home'],['r/stock','Stock Valuation','box']]}]:NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
 
 /* ============ ui atoms ============ */
@@ -665,7 +700,7 @@ function showJoinForm(inv){
  authShell(`<div class="card cardpad">
    <span class="lbl">Invite accepted</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Create your account</h2>
-   <p class="muted" style="font-size:13.5px;margin-bottom:18px">You've been invited as <b>${inv.role==='admin'?'an Admin':'Staff'}</b>. Your mobile number becomes your login ID.</p>
+   <p class="muted" style="font-size:13.5px;margin-bottom:18px">You've been invited as <b>${inv.role==='admin'?'an Admin':inv.role==='company'?'a Company (figures-only) user':'Staff'}</b>. Your mobile number becomes your login ID.</p>
    <form id="jf">
      <div class="field"><label class="fl">Your full name</label><input class="in" id="j-name" required></div>
      <div class="field"><label class="fl">Mobile number (login ID)</label><input class="in" id="j-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
@@ -716,14 +751,14 @@ function renderShell(){
  <aside class="side">
    <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
    <nav id="sideNav">${nav.map(g=>(g.g?`<div class="sgroup">${g.g}</div>`:'')+g.items.map(linkHtml).join('')).join('')}</nav>
-   <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
+   <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role==='company'?'COMPANY VIEW':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
  </aside>
  <main class="main">
    <header class="topbar"><div class="tleft"><a class="icon-btn" id="topBack" href="#/${isCust?'shop':'dash'}">${ic('back',17)}</a><h1 id="pageTitle">${isCust?'Shop':'Dashboard'}</h1></div>
    <div class="tright"><span class="livewrap"><i></i>LIVE</span><button class="uchip" id="uChip"><span class="uname">${esc(u.name)}</span><span class="avatar">${ini}</span></button></div></header>
    <div id="view" class="view"></div>
  </main>
- <nav class="bnav">${(isCust?CNAV:[['dash','Home','home'],['sales','Sales','bag'],['purchases','Purchase','truck'],['r/stock','Stock','box'],['more','More','grid']]).map(it=>{
+ <nav class="bnav">${(isCust?CNAV:u.role==='company'?[['dash','Home','home'],['r/stock','Stock','box']]:[['dash','Home','home'],['sales','Sales','bag'],['purchases','Purchase','truck'],['r/stock','Stock','box'],['more','More','grid']]).map(it=>{
    const b=it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:it[0]==='more'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:'';
    return it[0]==='more'?`<button id="moreBtn">${ic(it[2],20)}${it[1]}${b}</button>`:`<a href="#/${it[0]}" data-nav="${it[0]}">${ic(it[2],20)}${it[1]}${b}</a>`}).join('')}</nav>`;
  $('#uChip').onclick=()=>isCust?openAccountSheet():userSheet();
@@ -759,7 +794,7 @@ function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalan
  </div><div style="height:10px"></div>`);
  $('#acOut').onclick=logout;$('#acPw').onclick=()=>{closeSheet();openSelfPwModal()}}
 
-/* ============ dashboard (v2, hardened, role-aware) ============ */
+/* ============ dashboards ============ */
 function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
  const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
  SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
@@ -805,7 +840,7 @@ function drawCheckBody(){const dc=S.dashCheck;let f=dc.from||'2000-01-01',t=dc.t
  <div style="border-top:1px dashed var(--line);padding-top:8px;max-width:560px">
   <div class="trow"><span class="muted">Gross sales · ${invs.length} inv − returns · ${rets.length}</span><b>${money(gS)} − ${money(rS)}</b></div>
   <div class="trow"><span class="muted">Purchases · ${purs.length} inv − returns · ${prets.length}</span><b>${money(gP)} − ${money(rP)}</b></div>
-  <div class="trow"><span class="muted">Collected in / Paid out</span><b>${money(collected)} / ${money(paidOut)}</b></div>
+  ${S.me.role!=='company'?`<div class="trow"><span class="muted">Collected in / Paid out</span><b>${money(collected)} / ${money(paidOut)}</b></div>`:''}
   <div class="trow grand"><span>Sales − purchases (net trading)</span><b>${money(netS-netP)}</b></div>
  </div>
  ${(!invs.length&&!purs.length)?'<p class="muted" style="font-size:12px;margin-top:8px">No transactions in this period — pick another range above.</p>':''}`}
@@ -821,6 +856,44 @@ function bindDashCheck(){
  if(fi)fi.onchange=()=>{S.dashCheck.from=fi.value||'2000-01-01';S.dashCheck.preset='custom';qsa('[data-dc]').forEach(x=>x.classList.remove('on'));syncHead();drawCheckBody()};
  if(ti)ti.onchange=()=>{S.dashCheck.to=ti.value||todayISO();S.dashCheck.preset='custom';qsa('[data-dc]').forEach(x=>x.classList.remove('on'));syncHead();drawCheckBody()};
  drawCheckBody()}
+/* company (figures-only) dashboard */
+function vDashCompany(){
+ setTop('Dashboard');setActiveNav('dash');
+ const t=todayISO(),u=S.me,s=SET();
+ if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
+ const ms=monthStart(t);
+ const dS=SALES().filter(d=>d.date===t),dP=PURCHASES().filter(d=>d.date===t);
+ const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(dS,d=>+d.paid);
+ const mS=SALES().filter(d=>d.date>=ms),mP=PURCHASES().filter(d=>d.date>=ms);
+ const mCol=sum(RECEIPTS().filter(r=>r.date>=ms),r=>r.amount)+sum(mS,d=>+d.paid);
+ const hr=new Date().getHours(),greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+ const sr=stockRows();const stC=sum(sr,x=>x.value);
+ const topStk=sr.filter(x=>x.qty>0).slice(0,6);
+ V().innerHTML=`
+ <div class="pagehead" style="margin-bottom:12px"><div><span class="lbl">${esc(s.businessName)} · company view</span><div class="ptitle">${greet}, ${esc(u.name.split(' ')[0])}</div><div class="psub">${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div></div>
+ <div class="kpis">
+   <div class="kpi tint-g"><span class="lbl">Sales · today</span><div class="kpiV" data-v="${sum(dS,d=>d.total)}">0</div><div class="kpiD">${dS.length} invoices</div></div>
+   <div class="kpi"><span class="lbl">Collection · today</span><div class="kpiV" style="color:var(--green)" data-v="${colT}">0</div><div class="kpiD">cash received</div></div>
+   <div class="kpi tint-r"><span class="lbl">Purchases · today</span><div class="kpiV" data-v="${sum(dP,d=>d.total)}">0</div><div class="kpiD">${dP.length} invoices</div></div>
+   <div class="kpi"><span class="lbl">Stock @ cost</span><div class="kpiV" style="color:var(--amber)" data-v="${stC}">0</div><div class="kpiD">${ITEMS().length} items</div></div>
+ </div>
+ <div class="kpis">
+   <div class="kpi tint-g"><span class="lbl">Sales · this month</span><div class="kpiV" data-v="${sum(mS,d=>d.total)}">0</div><div class="kpiD">${mS.length} invoices MTD</div></div>
+   <div class="kpi"><span class="lbl">Collection · this month</span><div class="kpiV" style="color:var(--green)" data-v="${mCol}">0</div><div class="kpiD">receipts + with invoices</div></div>
+   <div class="kpi tint-r"><span class="lbl">Purchases · this month</span><div class="kpiV" data-v="${sum(mP,d=>d.total)}">0</div><div class="kpiD">${mP.length} invoices MTD</div></div>
+ </div>
+ <div class="card" style="margin-bottom:14px">
+   <div class="cardhead"><span class="lbl">Cash pulse · last 14 days</span><div class="legend"><span><i class="dot" style="background:var(--green)"></i>Sales</span><span><i class="dot" style="background:var(--red)"></i>Purchases</span></div></div>
+   <div class="cardpad chartwrap" id="pulse">${pulseChart()}</div>
+ </div>
+ ${dashCheckCard()}
+ <div class="card"><div class="cardhead"><span class="lbl">Stock valuation @ cost</span><a class="btn btn-ghost btn-sm" href="#/r/stock">Full detail</a></div><div class="cardpad">
+   ${topStk.length?topStk.map(x=>`<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${x.qty} pcs @ ${money(x.ac)}</span></div><div class="btrack"><i style="width:${Math.max(2,stC?x.value/stC*100:0)}%;background:var(--amber)"></i></div><div class="bv">${money(x.value)}</div></div>`).join('')+`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">Total stock @ cost</span><b style="font-size:17px">${money(stC)}</b></div>`:`<div class="muted" style="text-align:center;padding:18px 0">No stock yet.</div>`}
+ </div></div>`;
+ qsa('.kpiV[data-v]').forEach(el=>countUp(el,+el.dataset.v));
+ bindPulse();bindDashCheck();
+}
+/* main dashboard (admin/staff) */
 function vDash(){
  setTop('Dashboard');setActiveNav('dash');
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
@@ -965,7 +1038,7 @@ function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');set
   qsa('.lrow').forEach(r=>r.onclick=()=>go(D.path+'/view/'+r.dataset.id))};
  draw()}
 
-/* ============ doc form ============ */
+/* ============ doc form (party + items via live search) ============ */
 function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+D.title,D.path);setActiveNav(D.path);
  if(!ITEMS().length){V().innerHTML=`<div class="card"><div class="empty">${ic('box',34)}<div class="big">No items in your catalogue</div>Add items (and categories/brands) before raising ${D.title.toLowerCase()}s.<div style="margin-top:14px"><a class="btn btn-primary" href="#/items">Go to Items</a></div></div></div>`;return}
  if(!PARTIES().length){V().innerHTML=`<div class="card"><div class="empty">${ic('users',34)}<div class="big">No parties yet</div>Add a ${D.partyKind} first.<div style="margin-top:14px"><a class="btn btn-primary" href="#/parties">Go to Parties</a></div></div></div>`;return}
@@ -974,16 +1047,19 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  let draft=null;
  if(type==='sale'&&S.draftOrder){draft=dbGet('orders',S.draftOrder);
   if(draft){st.partyId=draft.partyId;st.lines=LINES(draft).map(l=>({itemId:l.itemId,qty:+l.qty,rate:+l.rate}))}}
- const partyOpts=PARTIES().filter(p=>p.type===D.partyKind||p.type==='both').map(p=>`<option value="${p.id}" ${sel(p.id,st.partyId)}>${esc(p.name)}</option>`).join('');
+ const preParty=st.partyId?partyById(st.partyId):null;
  V().innerHTML=`
  <div class="pagehead"><div><span class="lbl">${ed?'Editing':'New document'}</span><div class="ptitle">${ed?esc(ed.no):nextPreview(D.no)}</div><div class="psub">${D.title} · ${D.partyKind}</div></div></div>
  ${draft?`<div class="notice green">${ic('order',15)}<div>Filling this Sale Invoice from customer order <b>${esc(draft.no)}</b> — saving will mark the order as invoiced. <a href="#/orders" style="font-weight:700">Cancel</a></div></div>`:''}
  <form id="docForm" class="card cardpad">
    <div class="frow">
-     <div class="field"><label class="fl">${D.partyKind==='customer'?'Customer':'Supplier'}</label><select class="sel" id="f-party" required><option value="">Select party…</option>${partyOpts}</select></div>
+     <div class="field"><label class="fl">${D.partyKind==='customer'?'Customer':'Supplier'}</label>
+       <div class="combowrap"><input class="in" id="f-party-name" placeholder="Type to search ${D.partyKind}…" autocomplete="off" value="${preParty?esc(preParty.name):''}"></div>
+       <div class="combo-sub" id="f-party-sub"></div>
+     </div>
      <div class="field"><label class="fl">Date</label><input class="in" type="date" id="f-date" value="${st.date}" required></div>
    </div>
-   <div class="field"><label class="fl">Items</label>
+   <div class="field"><label class="fl">Items — type to search</label>
      <div id="lines"></div>
      <button type="button" class="btn btn-ghost btn-sm" id="addLine" style="margin-top:10px">${ic('plus',15)}Add item</button>
    </div>
@@ -1019,16 +1095,32 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
    </div>
    <div class="savebar"><a class="btn btn-ghost" href="#/${D.path}">Cancel</a><button class="btn btn-primary" id="docSaveBtn">${ic('check',16)}Save ${D.title}</button></div>
  </form>`;
- function itemOpts(sid){let h='<option value="">Select item…</option>';CATS().forEach(c=>{const its=ITEMS().filter(i=>i.categoryId===c.id);if(!its.length)return;h+=`<optgroup label="${esc(c.name)}">`+its.map(i=>`<option value="${i.id}" ${sel(i.id,sid)}>${esc(i.name)}${i.brandId?' — '+esc(brandById(i.brandId)?.name||''):''}</option>`).join('')+'</optgroup>'});return h}
- function lineHtml(l,i){return `<div class="fline" data-i="${i}">
-   <select class="sel fl-item">${itemOpts(l.itemId)}</select>
+ /* party combo */
+ const partyInput=$('#f-party-name');
+ attachCombo(partyInput,{
+  getPool:()=>PARTIES().filter(p=>p.type===D.partyKind||p.type==='both').sort((a,b)=>a.name.localeCompare(b.name))
+   .map(p=>({id:p.id,label:p.name,sub:`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))}`)),
+  onPick:o=>{st.partyId=o.id;const p=partyById(o.id);
+   $('#f-party-sub').textContent=p?`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))} ${partyBalance(p.id)>0?'Dr':'Cr'}`:''}
+ });
+ if(preParty){const p=preParty;$('#f-party-sub').textContent=`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))} ${partyBalance(p.id)>0?'Dr':'Cr'}`}
+ /* item line combos */
+ function lineHtml(l,i){const it=itemById(l.itemId);
+  return `<div class="fline" data-i="${i}">
+   <div class="fl-item combowrap"><input class="in" placeholder="Type to search item…" autocomplete="off" value="${it?esc(it.name):''}"></div>
    <input class="in fl-qty" type="number" step="any" min="0" placeholder="Qty" value="${l.qty}">
    <input class="in fl-rate" type="number" step="any" min="0" placeholder="Rate" value="${l.rate||''}">
-   <div class="fl-amt">${money(l.qty*l.rate)}</div>
+   <div class="fl-amt">${money((+l.qty||0)*(+l.rate||0))}</div>
    <button type="button" class="icon-btn fl-del" title="Remove">${ic('trash',15)}</button></div>`}
  function renderLines(){const box=$('#lines');box.innerHTML=st.lines.map(lineHtml).join('');
   qsa('.fline').forEach(row=>{const i=+row.dataset.i;
-   row.querySelector('.fl-item').onchange=e=>{st.lines[i].itemId=e.target.value;const it=itemById(e.target.value);if(it){st.lines[i].rate=+(it[D.rateKey]||0);row.querySelector('.fl-rate').value=st.lines[i].rate}recalc()};
+   const nameIn=row.querySelector('.fl-item input');
+   attachCombo(nameIn,{
+    getPool:()=>ITEMS().slice().sort((a,b)=>a.name.localeCompare(b.name))
+     .map(it=>({id:it.id,label:it.name,rate:+(it[D.rateKey]||0),
+      sub:`${catById(it.categoryId)?.name||'—'} · ${brandById(it.brandId)?.name||'—'} · ${money(it[D.rateKey]||0)} · ${stockOf(it.id)} in stock`}),
+    onPick:o=>{st.lines[i].itemId=o.id;st.lines[i].rate=o.rate;
+     row.querySelector('.fl-rate').value=o.rate;recalc()}});
    row.querySelector('.fl-qty').oninput=e=>{st.lines[i].qty=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
    row.querySelector('.fl-rate').oninput=e=>{st.lines[i].rate=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
    row.querySelector('.fl-del').onclick=()=>{st.lines.splice(i,1);if(!st.lines.length)st.lines.push({itemId:'',qty:1,rate:0});renderLines()}})}
@@ -1044,7 +1136,6 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
   $('#stockWarn').innerHTML=w.length?`<div class="notice">${ic('alert',15)}<div>${w.map(esc).join('<br>')}</div></div>`:'';
   const gb=$('#gbLabel');if(gb){gb.innerHTML=(st.goodsBack?'Goods are coming back':'No goods movement — credit only')+(type==='saleReturn'?' · stock will increase':' · stock will reduce')}}
  $('#addLine').onclick=()=>{st.lines.push({itemId:'',qty:1,rate:0});renderLines()};
- $('#f-party').onchange=e=>st.partyId=e.target.value;
  $('#f-date').onchange=e=>st.date=e.target.value;
  if(!D.isReturn){$('#f-disc').oninput=e=>{st.discount=+e.target.value||0;recalc()};$('#f-paid').oninput=e=>{st.paid=+e.target.value||0;recalc()};$('#f-pm').onchange=e=>st.payMode=e.target.value}
  $('#f-note').oninput=e=>st.note=e.target.value;
@@ -1058,7 +1149,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  renderLines();recalc();
  $('#docForm').onsubmit=async e=>{e.preventDefault();const sb=$('#docSaveBtn');sb.disabled=true;
   try{
-   if(!st.partyId){toast('Select a party','err');return}
+   if(!st.partyId){toast('Select a party — type in the search box and pick','err');return}
    const lines=st.lines.filter(l=>l.itemId&&l.qty>0);
    if(!lines.length){toast('Add at least one item with quantity','err');return}
    if(lines.some(l=>!(+l.rate>=0))){toast('Rates must be 0 or more','err');return}
@@ -1269,11 +1360,15 @@ function vLedger(pid){setTop('Ledger');setActiveNav('ledger');
  if(!pid&&PARTIES().length)pid=PARTIES()[0].id;
  const draw=()=>{const p=pid?partyById(pid):null;let run=0;const es=p?partyEntries(pid):[];
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Ledger</div><div class="psub">Dr = they owe you · Cr = you owe them</div></div></div>
-  <div class="field" style="max-width:420px"><label class="fl">Party</label><select class="sel" id="lgP">${PARTIES().slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<option value="${x.id}" ${sel(x.id,pid)}>${esc(x.name)} (${esc(x.type)})</option>`).join('')}</select></div>
+  <div class="field" style="max-width:420px"><label class="fl">Party — type to search</label>
+   <div class="combowrap"><input class="in" id="lgP-name" placeholder="Type to search party…" autocomplete="off" value="${p?esc(p.name):''}"></div>
+  </div>
   ${p?`<div class="card"><div class="cardhead"><span class="lbl">${esc(p.name)} · account</span><span class="badge ${(()=>{const b=partyBalance(pid);return Math.abs(b)<0.004?'b-gray':b>0?'b-green':'b-red'})()}">Balance ${money(Math.abs(partyBalance(pid)))}${Math.abs(partyBalance(pid))<0.004?'':partyBalance(pid)>0?' Dr':' Cr'}</span></div><div class="cardpad" style="padding-top:6px">
    ${es.length?es.map(e=>{run+=e.dr-e.cr;return `<div class="lgrow" ${e.link?`data-go="${e.link}" style="cursor:pointer"`:''}><span class="ld"><b>${esc(e.desc)}${e.memo?' <span class="badge b-gray">memo</span>':''}</b><span>${fmtDate(e.date)}${e.ref?' · '+esc(e.ref):''}</span></span><span class="num" style="color:var(--green)">${e.dr?money(e.dr):''}</span><span class="num" style="color:var(--red)">${e.cr?money(e.cr):''}</span><span class="num" style="font-weight:600;color:${run>0.004?'var(--green)':run<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(run))}${Math.abs(run)<0.004?'':run>0?' Dr':' Cr'}</span></div>`}).join(''):'<div class="muted" style="text-align:center;padding:16px 0">No entries for this party yet.</div>'}
   </div></div>`:`<div class="card"><div class="empty">${ic('users',34)}<div class="big">No parties yet</div>Create parties to maintain ledgers.</div></div>`}`;
-  $('#lgP')&&($('#lgP').onchange=e=>{pid=e.target.value;draw()});
+  const pin=$('#lgP-name');
+  attachCombo(pin,{getPool:()=>PARTIES().slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>({id:x.id,label:x.name,sub:`${x.type} · ${x.phone||'no phone'}`})),
+   onPick:o=>{pid=o.id;draw()}});
   qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go))};
  draw()}
 
@@ -1290,16 +1385,23 @@ function vMoneyList(kind){const isR=kind==='receipt';setTop(isR?'Collections':'P
  draw()}
 function vMoneyForm(kind,preParty,editId){const isR=kind==='receipt';setTop((editId?'Edit ':'New ')+(isR?'Collection':'Payment'),isR?'collections':'payments');
  const ed=editId?dbGet(isR?'receipts':'payments',editId):null;
+ const selP=ed?partyById(ed.partyId):(preParty?partyById(preParty):null);
  V().innerHTML=`<div class="pagehead"><div><span class="lbl">${editId?'Editing':'New entry'}</span><div class="ptitle">${isR?'Cash received':'Cash paid'}</div><div class="psub">${isR?'From a customer':'To a supplier'} · goes straight to their ledger</div></div></div>
  <form id="mfForm" class="card cardpad">
-  <div class="field"><label class="fl">Party</label><select class="sel" id="mf-party" required><option value="">Select party…</option>${PARTIES().slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.id}" ${sel(p.id,ed?ed.partyId:preParty)}>${esc(p.name)} (${esc(p.type)})</option>`).join('')}</select></div>
+  <div class="field"><label class="fl">Party — type to search</label>
+   <div class="combowrap"><input class="in" id="mf-party-name" placeholder="Type to search party…" autocomplete="off" value="${selP?esc(selP.name):''}"></div>
+   <div class="combo-sub" id="mf-party-sub">${selP?`${selP.type} · ${selP.phone||'no phone'}`:''}</div>
+  </div>
   <div class="frow"><div class="field"><label class="fl">Date</label><input class="in" type="date" id="mf-date" value="${ed?ed.date:todayISO()}" required></div>
   <div class="field"><label class="fl">Amount</label><input class="in" type="number" step="any" min="0" id="mf-amt" required value="${ed?+ed.amount||'':''}" placeholder="0"></div></div>
   <div class="frow"><div class="field"><label class="fl">Mode</label><select class="sel" id="mf-mode">${['Cash','UPI','Bank','Card','Cheque'].map(m=>`<option ${sel(m,ed?.mode||'Cash')}>${m}</option>`).join('')}</select></div>
   <div class="field"><label class="fl">Note</label><input class="in" id="mf-note" value="${esc(ed?.note||'')}"></div></div>
   <div class="savebar"><a class="btn btn-ghost" href="#/${isR?'collections':'payments'}">Cancel</a><button class="btn btn-primary">${ic('check',16)}Save entry</button></div></form>`;
- $('#mfForm').onsubmit=e=>{e.preventDefault();const o={date:$('#mf-date').value,partyId:$('#mf-party').value,amount:+$('#mf-amt').value||0,mode:$('#mf-mode').value,note:$('#mf-note').value.trim(),created:ed?ed.created:Date.now()};
-  if(!o.partyId)return toast('Select a party','err');if(o.amount<=0)return toast('Amount must be more than 0','err');
+ let pickedPid=selP?selP.id:'';
+ attachCombo($('#mf-party-name'),{getPool:()=>PARTIES().slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>({id:x.id,label:x.name,sub:`${x.type} · ${x.phone||'no phone'} · balance ${money(Math.abs(partyBalance(x.id)))}`})),
+  onPick:o=>{pickedPid=o.id;const p=partyById(o.id);$('#mf-party-sub').textContent=p?`${p.type} · ${p.phone||'no phone'}`:''}});
+ $('#mfForm').onsubmit=e=>{e.preventDefault();const o={date:$('#mf-date').value,partyId:pickedPid,amount:+$('#mf-amt').value||0,mode:$('#mf-mode').value,note:$('#mf-note').value.trim(),created:ed?ed.created:Date.now()};
+  if(!o.partyId)return toast('Select a party — type in the search box and pick','err');if(o.amount<=0)return toast('Amount must be more than 0','err');
   if(ed){dbUpdate(isR?'receipts':'payments',ed.id,o);toast('Entry updated')}else{dbAdd(isR?'receipts':'payments',o);toast('Entry saved')}
   go(isR?'collections':'payments')}}
 
@@ -1324,7 +1426,7 @@ function emptyHtml(icon,msg){return `<div class="empty">${ic(icon,34)}<div class
 function mk([f,t]){return{from:f,to:t}}
 
 function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
- const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,basis=st.basis||'cost';
+ const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
   const rows=stockRows().map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
   const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
   const val=x=>basis==='cost'?x.cv:x.sv;
@@ -1334,14 +1436,15 @@ function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.repo
    const arr=rows.slice().sort((a,b)=>val(b)-val(a));const mx=Math.max(1,...arr.map(val));
    body=arr.length?arr.map(x=>{const v=val(x);
     const meta=`${esc(catById(x.it.categoryId)?.name||'—')} · ${esc(brandById(x.it.brandId)?.name||'—')}`;
-    const sub=basis==='cost'
-     ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
-     :`${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · <b style="color:${x.profit>=0?'var(--green)':'var(--red)'}">${x.profit>=0?'profit':'loss'} ${money(Math.abs(x.profit))}</b>`;
+    const sub=co
+     ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)}`
+     :(basis==='cost'
+      ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
+      :`${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · <b style="color:${x.profit>=0?'var(--green)':'var(--red)'}">${x.profit>=0?'profit':'loss'} ${money(Math.abs(x.profit))}</b>`);
     return `<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${sub}</span></div><div class="btrack"><i style="width:${Math.max(2,v/mx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join('')
     +`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">${basis==='cost'?'Total stock @ cost':'Total stock @ sale price'}</span><b style="font-size:17px">${money(basis==='cost'?totC:totS)}</b></div>`
     :emptyHtml('box','No items yet')}
   else{
-   /* FIXED: read brandId/categoryId from x.it, include unassigned as its own bucket */
    const dim=tab==='brand'?'brandId':'categoryId';
    const groups=groupBy(rows,x=>(x.it&&x.it[dim])||'__na');
    const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=id==='__na'?null:(dim==='brand'?brandById(id):catById(id));
@@ -1352,16 +1455,16 @@ function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.repo
     <div style="flex:1;min-width:200px">${arr.map((a,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${cols[i%cols.length]}"></i>${esc(a.name)}</span><span class="mono muted">${(val(a)/tot*100).toFixed(1)}% · ${money(val(a))}</span></div>`).join('')}</div></div>`}
    const gmx=Math.max(1,...arr.map(val));
    body+=arr.length?arr.map(a=>{const v=val(a);
-    return `<div class="brow"><div><span class="bname">${esc(a.name)}</span><span class="bsub">${a.qty} pcs · cost ${money(a.cv)} · sale ${money(a.sv)} · potential ${a.profit>=0?'+':'-'}${money(Math.abs(a.profit))}</span></div><div class="btrack"><i style="width:${Math.max(2,v/gmx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join(''):emptyHtml('layers','Nothing to value yet')}
+    return `<div class="brow"><div><span class="bname">${esc(a.name)}</span><span class="bsub">${a.qty} pcs · cost ${money(a.cv)}${co?'':` · sale ${money(a.sv)} · potential ${a.profit>=0?'+':'-'}${money(Math.abs(a.profit))}`}</span></div><div class="btrack"><i style="width:${Math.max(2,v/gmx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join(''):emptyHtml('layers','Nothing to value yet')}
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div></div></div>
-  <div class="tabs" style="margin-bottom:8px">
+  ${co?'':`<div class="tabs" style="margin-bottom:8px">
    <button class="chip ${basis==='cost'?'on':''}" data-bs="cost">At Cost</button>
    <button class="chip ${basis==='sale'?'on':''}" data-bs="sale">At Sale Price</button>
-  </div>
-  <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${sumTile('Stock @ sale price',money(totS),'var(--amber)')}${sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
+  </div>`}
+  <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${co?sumTile('Units in stock',sum(rows,x=>x.qty)):sumTile('Stock @ sale price',money(totS),'var(--amber)')}${co?'':sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${co?'':sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
   ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise']])}
   <div class="card cardpad">${body}</div>
-  <p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today's selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses. Items without a brand/category set appear under <b>Unassigned</b>.</p>`;
+  ${co?'':'<p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today\'s selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses. Items without a brand/category set appear under <b>Unassigned</b>.</p>'}`;
   qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
   bindTabs(key)};
  draw()}
@@ -1611,7 +1714,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    <div class="card"><div class="list">${team.length?team.map(t=>{const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
     return `<div class="lrow editmode"><span class="avatar">${ini}</span>
     <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
-    <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role}</span>
+    <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':t.role==='company'?'b-gray':'b-gray'}">${t.role==='super'?'Super admin':t.role==='company'?'Company':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
     ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
    <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
@@ -1656,7 +1759,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
 async function openInviteModal(){const me=S.me;
- const roles=me.role==='super'?[['staff','Staff'],['admin','Admin']]:[['staff','Staff']];
+ const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ivForm">
   <div class="frow"><div class="field"><label class="fl">Role</label><select class="sel" id="iv-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div>
@@ -1674,7 +1777,7 @@ async function openInviteModal(){const me=S.me;
    <button class="btn btn-primary" style="width:100%;margin-top:8px" id="ivCopy">${ic('edit',16)}Copy code</button></div>`);
   $('#ivCopy').onclick=()=>copyText(code)}}
 async function openTeamModal(){const me=S.me;
- const roles=me.role==='super'?[['staff','Staff'],['admin','Admin'],['super','Super admin']]:[['staff','Staff']];
+ const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin'],['super','Super admin']]:[['staff','Staff'],['company','Company · figures only']];
  openModal(`<div class="mhead"><h3>Add staff / admin directly</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="nuForm">
   <div class="field"><label class="fl">Full name</label><input class="in" id="nu-name" required></div>
@@ -1703,17 +1806,30 @@ async function openCustomerModal(){
   <div class="field"><label class="fl">Customer name</label><input class="in" id="nc-name" required></div>
   <div class="frow"><div class="field"><label class="fl">Mobile (login ID)</label><input class="in" id="nc-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
   <div class="field"><label class="fl">Password</label><input class="in" id="nc-pass" type="password" required></div></div>
-  <div class="field"><label class="fl">Link to ledger party</label><select class="sel" id="nc-party"><option value="__new">— Create new party with this name —</option>${PARTIES().filter(p=>p.type!=='supplier').map(p=>`<option value="${p.id}">${esc(p.name)}${p.phone?' · '+esc(p.phone):''}</option>`).join('')}</select></div>
+  <div class="field"><label class="fl">Link to ledger party</label>
+   <label class="sego" style="margin-bottom:8px;display:inline-flex"><input type="checkbox" id="nc-new" checked><span>Create new party with this name</span></label>
+   <div id="nc-pick" style="display:none">
+     <div class="combowrap"><input class="in" id="nc-party-name" placeholder="Type to search existing party…" autocomplete="off"></div>
+     <div class="combo-sub" id="nc-party-sub"></div>
+   </div>
+  </div>
   <div id="ncErr" class="notice red" style="display:none"></div>
   <div class="muted" style="font-size:12px;margin-bottom:14px">The customer signs in on the same site with this mobile number and can browse, cart and place orders. Orders reach you live.</div>
   <button class="btn btn-primary" style="width:100%">Create customer login</button></form></div>`);
+ let pickedPid='';
+ attachCombo($('#nc-party-name'),{getPool:()=>PARTIES().filter(p=>p.type!=='supplier').sort((a,b)=>a.name.localeCompare(b.name)).map(x=>({id:x.id,label:x.name,sub:`${x.type} · ${x.phone||'no phone'}`})),
+  onPick:o=>{pickedPid=o.id;const p=partyById(o.id);$('#nc-party-sub').textContent=p?`${p.type} · ${p.phone||'no phone'}`:''}});
+ $('#nc-new').onchange=()=>{$('#nc-pick').style.display=$('#nc-new').checked?'none':'block'};
  $('#ncForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#ncErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
   const mob=normMobile($('#nc-mob').value),name=$('#nc-name').value.trim(),pw=$('#nc-pass').value;
   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
   if(pw.length<4)return err('Password too short');
+  const isNew=$('#nc-new').checked;
+  if(!isNew&&!pickedPid)return err('Pick an existing party in the search box, or tick “Create new party”.');
   try{
-   let pid=$('#nc-party').value;
-   if(pid==='__new'){const p=dbAdd('parties',{name,type:'customer',phone:mob,address:'',openingBalance:0,openingType:'dr'});pid=p.id}
+   let pid;
+   if(isNew){pid=dbAdd('parties',{name,type:'customer',phone:mob,address:'',openingBalance:0,openingType:'dr'}).id}
+   else{pid=pickedPid}
    const newUid=await createAuthUser(mobileToEmail(mob),pw);
    const batch=DB.batch();
    batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role:'customer',partyId:pid,active:true,created:Date.now()});
@@ -1861,6 +1977,10 @@ function route(){
   if(a==='account'){if(!V().innerHTML)vShop();openAccountSheet();return}
   go('shop');return}
  if(a==='shop'||a==='cart'||a==='my-orders'){go('dash');return}
+ if(u.role==='company'){
+  if(a==='dash')return vDashCompany();
+  if(a==='r'&&p[1]==='stock')return vReportStock();
+  go('dash');return}
  if(a==='dash')return vDash();
  if(a==='orders')return p[1]?vOrderDetail(p[1]):vOrders();
  if(['sales','purchases','sale-returns','purchase-returns'].includes(a)){
