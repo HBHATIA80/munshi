@@ -234,6 +234,19 @@ body.locked{overflow:hidden}
 .livewrap{display:flex;align-items:center;gap:8px;font:500 11px var(--mono);color:var(--ink2)}
 .livewrap i{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 1.6s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* item photos + zoom */
+.pimg{position:relative;width:100%;height:112px;border-radius:10px;overflow:hidden;background:#EFECE2}
+.pimg img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .45s cubic-bezier(.2,.7,.3,1)}
+.pcard:hover .pimg img,.pcard:focus-within .pimg img{transform:scale(1.7)}
+.pimg .phZ{position:absolute;right:8px;bottom:8px;background:rgba(15,42,31,.65);color:#fff;border-radius:8px;padding:3px 8px;font:600 10px var(--mono);opacity:0;transition:.25s;pointer-events:none;display:flex;align-items:center;gap:4px}
+.pcard:hover .phZ{opacity:1}
+.pimg.big{height:210px;cursor:zoom-in;margin-bottom:4px}
+.pimg.big.zoomed{cursor:zoom-out}
+.pimg.big.zoomed img{transform:scale(2)}
+.imthumb{width:38px;height:38px;border-radius:9px;object-fit:cover;flex:none;background:#EFECE2}
+.photopick{display:flex;gap:12px;align-items:center}
+.photopick .pv{width:76px;height:76px;border-radius:12px;overflow:hidden;background:#EFECE2;display:flex;align-items:center;justify-content:center;color:var(--ink3);flex:none}
+.photopick .pv img{width:100%;height:100%;object-fit:cover}
 #printArea{display:none}
 @media print{
   body.printing #app,body.printing #modalRoot,body.printing #toastRoot{display:none!important}
@@ -264,8 +277,11 @@ body.locked{overflow:hidden}
 
 <script>
 'use strict';
-
-
+/* ================================================================
+   STEP 1 — Firebase config (already filled with your project)
+   This block is an identifier, NOT a secret. Security comes from
+   the Firestore RULES you publish in the Firebase console.
+   ================================================================ */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyBFuvEGEhc7vC2j6XgH9bb6PnR-NjIfwDo",
   authDomain:"munshi-91aa9.firebaseapp.com",
@@ -274,7 +290,6 @@ const FIREBASE_CONFIG={
   messagingSenderId:"369936746338",
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
-
 /* STEP 2 — secret key that unlocks the one-time owner setup at yoursite/#/setup */
 const SETUP_CODE='HARVINDER-BHATIA-1505';
 
@@ -283,7 +298,7 @@ const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.quer
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const sum=(a,f)=>a.reduce((x,y)=>x+(+f(y)||0),0);
-const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[]};
+const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[],setupOK:false};
 function groupBy(a,f){const m={};a.forEach(x=>{const k=f(x);(m[k]=m[k]||[]).push(x)});return m}
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -307,6 +322,23 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
+/* ============ image helpers (compress in-browser, store in Firestore) ============ */
+function resizeImage(file,maxEdge,quality){return new Promise((res,rej)=>{
+ const rd=new FileReader();
+ rd.onload=()=>{const img=new Image();
+  img.onload=()=>{const sc=Math.min(1,maxEdge/Math.max(img.width,img.height));
+   const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);
+   c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+   res(c.toDataURL('image/jpeg',quality))};
+  img.onerror=()=>rej(new Error('bad image'));img.src=rd.result};
+ rd.onerror=()=>rej(new Error('read failed'));rd.readAsDataURL(file)})}
+async function photoDataUrl(file){let d=await resizeImage(file,640,.72);
+ if(d.length>270000)d=await resizeImage(file,480,.6);
+ if(d.length>270000)d=await resizeImage(file,360,.55);
+ return d}
+function itemThumb(it,size=38){if(it&&it.photo)return `<img class="imthumb" src="${it.photo}" style="width:${size}px;height:${size}px" alt="">`;
+ return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:9px">${esc((it&&it.name?it.name:'?')[0]||'?')}</span>`}
+
 /* ============ firebase data layer ============ */
 let auth=null,DB=null;
 const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],settings:null,counters:null,myParty:null};
@@ -321,7 +353,7 @@ function dbDel(c,id){DB.collection(c).doc(id).delete().catch(e=>{console.error('
 function dbGet(c,id){return state[c]?.find(x=>x.id===id)}
 const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
 function SET(){const base={businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:''};const cfg=state.settings||{};const c=Object.assign({},base,cfg);c.counters=state.counters||{};return c}
-function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
+function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address,welcomed:!!s.welcomed};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
 async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
  const n=await DB.runTransaction(async t=>{const s=await t.get(ref);const c=(s.exists&&s.data()[pre])||0;t.set(ref,{[pre]:c+1},{merge:true});return c+1});
  if(state.counters)state.counters[pre]=n;return pre+'-'+String(n).padStart(4,'0')}
@@ -330,15 +362,20 @@ function session(){return S.me}
 function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
 const RANK={customer:0,staff:1,admin:2,super:3};
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2};
-/* subscriptions */
+/* subscriptions — customer queries are scoped so Firestore rules accept them */
 function subscribeAll(me){
- const cols=me.role==='customer'
-  ?['items','categories','brands','orders','sales','receipts','saleReturns']
-  :COLLECTION_KEYS;
- cols.forEach(c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))});
+ if(me.role==='customer'){
+  const sub=(c,q)=>{let ref=DB.collection(c);if(q)ref=ref.where(q.f,'==',q.v);
+   S.unsubs.push(ref.onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
+  sub('items');sub('categories');sub('brands');
+  sub('orders',{f:'userId',v:me.id});
+  if(me.partyId){sub('sales',{f:'partyId',v:me.partyId});sub('saleReturns',{f:'partyId',v:me.partyId});sub('receipts',{f:'partyId',v:me.partyId});
+   S.unsubs.push(DB.collection('parties').doc(me.partyId).onSnapshot(s=>{state.myParty=s.exists?Object.assign({id:s.id},s.data()):null;onLive()}))}
+  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+  return}
+ COLLECTION_KEYS.forEach(c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))});
  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
- if(me.role!=='customer')S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
- if(me.role==='customer'&&me.partyId)S.unsubs.push(DB.collection('parties').doc(me.partyId).onSnapshot(s=>{state.myParty=s.exists?Object.assign({id:s.id},s.data()):null;onLive()}));
+ S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
 }
 /* live re-render guard */
 let liveT=null;
@@ -381,7 +418,6 @@ async function changeMyPw(curPw,newPw){const u=auth.currentUser;
 /* admin reset = new auth identity + remap (no old password needed) */
 async function adminResetPw(user,newPw){
  const mobile=user.mobile;
- const old=await DB.collection('logins').doc(mobile).get().catch(()=>null);
  const suffix=Math.random().toString(36).slice(2,8);
  const newEmail=mobile+'.'+suffix+'@munshi.app';
  const newUid=await createAuthUser(newEmail,newPw);
@@ -480,7 +516,7 @@ function closeSheet(){$('#sheetRoot').innerHTML='';document.body.classList.remov
 document.addEventListener('click',e=>{const a=e.target.closest('[data-close-sheet]');if(a)closeSheet()});
 const sel=(v,cur)=>v===cur?'selected':'';
 function showLoading(msg){$('#app').innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)"><div class="card cardpad" style="text-align:center;max-width:340px"><div class="mark" style="margin:0 auto 12px">M</div><b style="font:700 17px var(--disp)">Munshi</b><p class="muted" style="font-size:13px;margin-top:6px">${esc(msg||'Connecting to your books…')}</p></div></div>`}
-function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b>, find <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span> at the top of the script, and paste the config object from your Firebase project (Project settings → Your apps → Web app). Full steps are in the setup guide. Also set your own <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">SETUP_CODE</span> and publish the Firestore security rules from the guide.</p></div></div>`}
+function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b>, find <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span> at the top of the script, and paste the config object from your Firebase project. Also set your own <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">SETUP_CODE</span> and publish the Firestore security rules.</p></div></div>`}
 
 /* ============ auth screens ============ */
 function authShell(inner){
@@ -561,7 +597,7 @@ function renderSetup(){
    <p class="muted" style="font-size:13.5px;margin-bottom:18px">This account controls everything: users, invites, stock and books.</p>
    <form id="suForm">
      <div class="field"><label class="fl">Business name</label><input class="in" id="su-biz" required value="Munshi Traders"></div>
-     <div class="field"><label class="fl">Your full name</label><input class="in" id="su-name" required placeholder="e.g. Imran Sheikh"></div>
+     <div class="field"><label class="fl">Your full name</label><input class="in" id="su-name" required placeholder="e.g. Harvinder Bhatia"></div>
      <div class="field"><label class="fl">Mobile number (login ID)</label><input class="in" id="su-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
      <div class="frow"><div class="field"><label class="fl">Password</label><input class="in" id="su-pw" type="password" required autocomplete="new-password"></div>
      <div class="field"><label class="fl">Confirm password</label><input class="in" id="su-pw2" type="password" required autocomplete="new-password"></div></div>
@@ -582,7 +618,7 @@ function renderSetup(){
    const cred=await auth.createUserWithEmailAndPassword(mobileToEmail(mob),pw);
    const batch=DB.batch();
    batch.set(DB.collection('users').doc(cred.user.uid),{name,mobile:mob,role:'super',active:true,created:Date.now()});
-   batch.set(DB.collection('settings').doc('config'),{businessName:biz,currency:'₹',currencyWord:'Rupees',phone:'',address:''});
+   batch.set(DB.collection('settings').doc('config'),{businessName:biz,currency:'₹',currencyWord:'Rupees',phone:'',address:'',welcomed:false});
    batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
   }catch(ex){b.disabled=false;b.textContent='Create super admin & open books';
@@ -715,10 +751,9 @@ function vDash(){
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
  const daySales=sum(SALES().filter(d=>d.date===t),d=>d.total),yS=sum(SALES().filter(d=>d.date===y),d=>d.total);
  const dayPur=sum(PURCHASES().filter(d=>d.date===t),d=>d.total),yP=sum(PURCHASES().filter(d=>d.date===y),d=>d.total);
- const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(SALES().filter(d=>d.date===t),d=>d.paid)+sum(PRET().filter(d=>d.date===t&&d.settle==='cash'),d=>d.cashAmount);
+ const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(SALES().filter(d=>d.date===t),d=>d.paid);
  const newOrd=ORDERS().filter(o=>o.status==='new').length;
  const isEmpty=!SALES().length&&!PURCHASES().length&&!RECEIPTS().length;
- const days=[],sv=[],pv=[];for(let i=13;i>=0;i--){const d=addDays(t,-i);days.push(d);sv.push(sum(SALES().filter(x=>x.date===d),x=>x.total));pv.push(sum(PURCHASES().filter(x=>x.date===d),x=>x.total))}
  const low=stockRows().filter(r=>r.qty<=(+r.it.low||10)).sort((a,b)=>a.qty-b.qty).slice(0,6);
  const ms=monthStart(t);const tl=groupBy(saleLinesOf(SALES().filter(d=>d.date>=ms)),'itemId');
  const top=Object.keys(tl).map(id=>({id,net:sum(tl[id],r=>r.net),qty:sum(tl[id],r=>r.qty)})).sort((a,b)=>b.net-a.net).slice(0,5);
@@ -793,7 +828,7 @@ function bindPulse(){const svg=V().querySelector('#pHit');if(!svg)return;
 function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash settled':'Credit note';const b=(+d.total)-(+d.paid);return b<=0?'Paid':+d.paid>0?'Partial':'Unpaid'}
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
  let q='';
- const draw=()=>{const docs=LS.get(D.coll,[]).length?[]:null;const all=state[D.coll]||[];
+ const draw=()=>{const all=state[D.coll]||[];
   const fl=all.slice().sort((a,b)=>b.date===a.date?(b.created||0)-(a.created||0):b.date.localeCompare(a.date))
    .filter(d=>{const p=partyById(d.partyId);return !q||(d.no||'').toLowerCase().includes(q)||(p&&p.name.toLowerCase().includes(q))});
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${D.title}s</div><div class="psub">${fl.length} documents · ${money(sum(fl,d=>d.total))} total</div></div><a class="btn btn-primary" href="#/${D.path}/new">${ic('plus',16)}New</a></div>
@@ -1016,7 +1051,7 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Items</div><div class="psub">${its.length} in catalogue${editOK?'':' · read-only for staff'}</div></div>${editOK?`<button class="btn btn-primary" id="iNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="iq" placeholder="Search items…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${its.length?its.map(i=>{const so=stockOf(i.id),low=+(i.low||10);
-   return `<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
+   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
    ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-stk="${i.id}" title="Adjust stock">${ic('layers',15)}</button><button class="icon-btn" data-edit="${i.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${i.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">${ic('box',34)}<div class="big">No items yet</div>Create your first accessory.</div>`}</div></div>`;
   if(editOK){$('#iNew').onclick=()=>openItemModal();
    qsa('[data-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();openItemModal(itemById(b.dataset.edit))});
@@ -1027,9 +1062,22 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
     confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted')})})}
   $('#iq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
  draw()}
-function openItemModal(it){openModal(`<div class="mhead"><h3>${it?'Edit item':'New item'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+function openItemModal(it){let photoVal=it?(it.photo||''):'';
+ openModal(`<div class="mhead"><h3>${it?'Edit item':'New item'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="imForm">
   <div class="field"><label class="fl">Item name</label><input class="in" id="im-name" required value="${esc(it?.name||'')}" placeholder="e.g. boAt 33W Type-C Charger"></div>
+  <div class="field"><label class="fl">Product photo (customers see this in the shop)</label>
+    <div class="photopick">
+      <span class="pv" id="ph-pv">${photoVal?`<img src="${photoVal}" alt="">`:ic('box',26)}</span>
+      <div style="flex:1;min-width:0">
+        <input type="file" id="ph-file" accept="image/*" style="display:none">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" id="ph-sel">${ic('up',15)}Choose photo</button>
+          ${photoVal?`<button type="button" class="btn btn-ghost btn-sm" id="ph-rm" style="color:var(--red)">${ic('trash',15)}Remove</button>`:''}
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">Auto-compressed & saved with the item. Square photos look best.</div>
+      </div>
+    </div></div>
   <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
   <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div></div>
   <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?+it.purchaseRate||'':''}"></div>
@@ -1039,7 +1087,18 @@ function openItemModal(it){openModal(`<div class="mhead"><h3>${it?'Edit item':'N
   <div class="frow"><div class="field"><label class="fl">Low-stock alert at</label><input class="in" type="number" step="any" id="im-low" value="${it?+it.low||10:10}"></div>
   <div class="field"><label class="fl">SKU</label><input class="in" id="im-sku" value="${esc(it?.sku||'')}"></div></div>
   <button class="btn btn-primary" style="width:100%">${it?'Save changes':'Create item'}</button></form></div>`);
- $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),categoryId:$('#im-cat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
+ $('#ph-sel').onclick=()=>$('#ph-file').click();
+ $('#ph-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  const btn=$('#ph-sel');btn.disabled=true;const old=btn.innerHTML;btn.textContent='Processing…';
+  try{photoVal=await photoDataUrl(f);
+   $('#ph-pv').innerHTML=`<img src="${photoVal}" alt="">`;
+   if(!$('#ph-rm'))btn.insertAdjacentHTML('afterend',`<button type="button" class="btn btn-ghost btn-sm" id="ph-rm" style="color:var(--red)">${ic('trash',15)}Remove</button>`);
+   $('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
+   toast('Photo ready — press Save to keep it')}
+  catch(ex){toast('Could not read that image','err')}
+  btn.disabled=false;btn.innerHTML=old;e.target.value=''};
+ if($('#ph-rm'))$('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
+ $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
   if(!o.name)return toast('Name is required','err');
   if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}closeModal();route()}}
 function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
@@ -1198,20 +1257,20 @@ function vReportPurchase(){setTop('Purchase Analysis');setActiveNav('r/purchase'
  draw()}
 function vReportCollection(){setTop('Collection Analysis');setActiveNav('r/collection');S.report.collection=S.report.collection||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='collection';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
-  const recs=RECEIPTS().filter(x=>inR(x.date,f,t)),invP=SALES().filter(d=>inR(d.date,f,t)&&+d.paid>0),prc=PRET().filter(d=>inR(d.date,f,t)&&d.settle==='cash');
-  const total=sum(recs,x=>x.amount)+sum(invP,d=>d.paid)+sum(prc,d=>d.cashAmount);
+  const recs=RECEIPTS().filter(x=>inR(x.date,f,t)),invP=SALES().filter(d=>inR(d.date,f,t)&&+d.paid>0);
+  const total=sum(recs,x=>x.amount)+sum(invP,d=>d.paid);
   let body='';const tab=r.tab;
-  const dayTotal=d=>sum(recs.filter(x=>x.date===d),x=>x.amount)+sum(invP.filter(x=>x.date===d),x=>x.paid)+sum(prc.filter(x=>x.date===d),x=>x.cashAmount);
-  if(tab==='date'){const dates=[...new Set([...recs.map(x=>x.date),...invP.map(d=>d.date),...prc.map(d=>d.date)])].sort();
+  const dayTotal=d=>sum(recs.filter(x=>x.date===d),x=>x.amount)+sum(invP.filter(x=>x.date===d),x=>x.paid);
+  if(tab==='date'){const dates=[...new Set([...recs.map(x=>x.date),...invP.map(d=>d.date)])].sort();
    const mx=Math.max(1,...dates.map(dayTotal));
-   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(recs.filter(x=>x.date===d),x=>x.amount),b=sum(invP.filter(x=>x.date===d),x=>x.paid),c=sum(prc.filter(x=>x.date===d),x=>x.cashAmount);
-    return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">receipts ${money(a)} · with invoices ${money(b)}${c?' · supplier refund '+money(c):''}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--green)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('down','No collections in this period')}
+   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(recs.filter(x=>x.date===d),x=>x.amount),b=sum(invP.filter(x=>x.date===d),x=>x.paid);
+    return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">receipts ${money(a)} · with invoices ${money(b)}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--green)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('down','No collections in this period')}
   else{const g=groupBy([...recs.map(x=>({pid:x.partyId,amt:x.amount})),...invP.map(d=>({pid:d.partyId,amt:+d.paid}))],'pid');
    const arr=Object.keys(g).map(k=>({p:partyById(k),amt:sum(g[k],x=>x.amt)})).filter(x=>x.p).sort((a,b)=>b.amt-a.amt);
    body=arr.length?arr.map(x=>barRow(x.p.name,x.p.type,x.amt,arr[0].amt,'var(--green)')).join(''):emptyHtml('users','No collections in this period')}
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Collection Analysis</div><div class="psub">Money in · ${fmtDate(f)} → ${fmtDate(t)}</div></div></div>
   ${rangeBar(key)}
-  <div class="sumrow">${sumTile('Total collected',money(total),'var(--green)')}${sumTile('Receipts',money(sum(recs,x=>x.amount)))}${sumTile('With invoices',money(sum(invP,d=>d.paid)))}${sumTile('Supplier refunds',money(sum(prc,d=>d.cashAmount)))}</div>
+  <div class="sumrow">${sumTile('Total collected',money(total),'var(--green)')}${sumTile('Receipts',money(sum(recs,x=>x.amount)))}${sumTile('With invoices',money(sum(invP,d=>d.paid)))}</div>
   ${tabsHtml(key,r.tab,[['date','Date-wise'],['party','Party-wise']])}
   <div class="card cardpad">${body}</div>`;
   bindRange(key);bindTabs(key)};
@@ -1279,7 +1338,7 @@ function setOrderStatus(id,status,by){const o=dbGet('orders',id);if(!o)return;
 function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  if(!o){V().innerHTML='<div class="card"><div class="empty">Order not found.</div></div>';return}
  setTop('Order '+o.no,isCustomer?'my-orders':'orders');setActiveNav(isCustomer?'my-orders':'orders');
- const p=partyById(o.partyId),u=S.me,staff=!isCustomer;
+ const p=partyById(o.partyId),staff=!isCustomer;
  const acts=[];
  if(staff){
   if(o.status==='new')acts.push(`<button class="btn btn-primary" id="oConfirm">${ic('check',16)}Confirm</button>`);
@@ -1294,7 +1353,7 @@ function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  <div class="card" style="margin-bottom:14px"><div class="cardpad">
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
    ${o.lines.map(l=>{const it=itemById(l.itemId);const so=it?stockOf(it.id):0;
-    return `<div class="lgrow"><span class="ld"><b>${esc(it?it.name:'?')}</b><span>${it&&l.qty>so?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money(l.qty*l.rate)}</span></div>`}).join('')}
+    return `<div class="lgrow">${itemThumb(it,34)}<span class="ld"><b>${esc(it?it.name:'?')}</b><span>${it&&l.qty>so?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money(l.qty*l.rate)}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow grand"><span>Order total</span><b style="font-size:18px">${money(o.total)}</b></div>
    </div>
@@ -1313,12 +1372,13 @@ function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
 function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
  const draw=()=>{const items=ITEMS().filter(i=>!q||(i.name+' '+(i.sku||'')+' '+(brandById(i.brandId)?.name||'')).toLowerCase().includes(q)).filter(i=>cf==='all'||i.categoryId===cf);
   V().innerHTML=`
-  <div class="pagehead"><div><span class="lbl">${esc(SET().businessName)} · wholesale</span><div class="ptitle">Shop</div><div class="psub">Pick accessories and place an order — we confirm and deliver.</div></div></div>
+  <div class="pagehead"><div><span class="lbl">${esc(SET().businessName)} · wholesale</span><div class="ptitle">Shop</div><div class="psub">Pick accessories and place an order — we confirm and deliver. Hover a photo to zoom.</div></div></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="sq" placeholder="Search products…" value="${esc(q)}"></div>
   <div class="tabs">${['all',...CATS().map(c=>c.id)].map(id=>{const c=id==='all'?null:catById(id);return `<button class="chip ${cf===id?'on':''}" data-cf="${id}">${id==='all'?'All':esc(c?c.name:'…')}</button>`}).join('')}</div>
   <div class="pgrid">${items.length?items.map(i=>{const so=stockOf(i.id),t=tileFor(i.categoryId||i.name);
+   const img=i.photo?`<div class="pimg"><img src="${i.photo}" loading="lazy" alt="${esc(i.name)}"><span class="phZ">${ic('search',12)}ZOOM</span></div>`:`<div class="ptile" style="background:${t[0]};color:${t[1]}">${esc(i.name[0]||'?')}</div>`;
    return `<div class="pcard" data-id="${i.id}">
-     <div class="ptile" style="background:${t[0]};color:${t[1]}">${esc(i.name[0]||'?')}</div>
+     ${img}
      <div><div class="pbrand">${esc(brandById(i.brandId)?.name||'')}</div><div class="pname">${esc(i.name)}</div></div>
      <div class="prow"><span class="pprice">${money(i.saleRate)}</span><span class="badge ${so<=0?'b-red':so<=(+i.low||10)?'b-amber':'b-green'}">${so<=0?'Out':so+' left'}</span></div>
      <button class="btn btn-primary btn-sm" data-add="${i.id}" ${so<=0?'disabled':''}>${ic('cart',15)}Add to cart</button>
@@ -1330,9 +1390,10 @@ function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
  draw()}
 function openShopItem(it){if(!it)return;const so=stockOf(it.id);let q=1;
  const t=tileFor(it.categoryId||it.name);
+ const imgBig=it.photo?`<div class="pimg big" id="bigImg"><img src="${it.photo}" alt=""><span class="phZ" style="opacity:1">TAP TO ZOOM</span></div>`:`<div class="ptile" style="background:${t[0]};color:${t[1]};height:100px;font-size:36px;margin-bottom:14px">${esc(it.name[0]||'?')}</div>`;
  openModal(`<div class="mhead"><h3>${esc(it.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody">
-  <div class="ptile" style="background:${t[0]};color:${t[1]};height:100px;font-size:36px;margin-bottom:14px">${esc(it.name[0]||'?')}</div>
+  ${imgBig}
   <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(catById(it.categoryId)?.name||'')}</div>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
     <span class="pprice" style="font-size:20px">${money(it.saleRate)}</span>
@@ -1344,6 +1405,7 @@ function openShopItem(it){if(!it)return;const so=stockOf(it.id);let q=1;
   <button class="btn btn-primary" style="width:100%" id="qAdd">${ic('cart',16)}Add to cart</button>`
   :`<button class="btn btn-ghost" style="width:100%" disabled>Out of stock</button>`}
  </div>`);
+ const bi=$('#bigImg');if(bi)bi.onclick=()=>{bi.classList.toggle('zoomed');const z=bi.querySelector('.phZ');if(z)z.textContent=bi.classList.contains('zoomed')?'TAP TO SHRINK':'TAP TO ZOOM'};
  if(so>0){const upd=()=>{q=Math.max(1,Math.min(so,q));$('#qv').textContent=q;$('#qsub').textContent=money(q*it.saleRate)};
   $('#qp').onclick=()=>{q=Math.min(so,q+1);upd()};$('#qm').onclick=()=>{q=Math.max(1,q-1);upd()};
   $('#qAdd').onclick=()=>{cartAdd(it.id,q);closeModal()}}}
@@ -1354,7 +1416,7 @@ function vCart(){setTop('Cart');setActiveNav('cart');
   V().innerHTML=`
   <div class="pagehead"><div><div class="ptitle">Cart</div><div class="psub">${c.length} product${c.length!==1?'s':''} · ${cartCount()} pcs</div></div></div>
   ${c.length?`<div class="card cardpad">
-    ${c.map(x=>`<div class="cartrow"><div class="lmain"><div class="lname">${esc(x.it.name)}</div><div class="lsub"><span>${money(x.it.saleRate)} each</span>${x.l.qty>stockOf(x.it.id)?`<span style="color:var(--red)">only ${stockOf(x.it.id)} in stock</span>`:''}</div></div>
+    ${c.map(x=>`<div class="cartrow">${itemThumb(x.it,38)}<div class="lmain"><div class="lname">${esc(x.it.name)}</div><div class="lsub"><span>${money(x.it.saleRate)} each</span>${x.l.qty>stockOf(x.it.id)?`<span style="color:var(--red)">only ${stockOf(x.it.id)} in stock</span>`:''}</div></div>
     <div class="stepper"><button data-m="${x.it.id}">−</button><span>${x.l.qty}</span><button data-p="${x.it.id}">+</button></div>
     <div class="lamt" style="min-width:78px;text-align:right">${money(x.l.qty*x.it.saleRate)}</div>
     <button class="icon-btn" data-rm="${x.it.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`).join('')}
@@ -1538,7 +1600,7 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
    <button class="btn btn-primary" style="width:100%">Save settings</button></form></div></div>
  <div>
    <div class="card" style="margin-bottom:14px"><div class="cardhead"><span class="lbl">Data & backup</span></div><div class="cardpad">
-     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in Google Firestore — safe from device loss. Export a JSON backup for your records, or import one (e.g. from the old offline version — imported accounts need a password reset to activate sign-in).</p>
+     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in Google Firestore — safe from device loss. Export a JSON backup for your records, or import one (imported accounts need a password reset in Users to activate sign-in).</p>
      <div style="display:flex;gap:10px;flex-wrap:wrap">
        <button class="btn btn-ghost" id="expBtn">${ic('down',16)}Export backup</button>
        <button class="btn btn-ghost" id="impBtn">${ic('up',16)}Import backup</button>
@@ -1555,7 +1617,8 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
    </div></div>
  </div></div>`;
  $('#stForm').onsubmit=e=>{e.preventDefault();const n=SET();n.businessName=$('#st-biz').value.trim()||n.businessName;n.currency=$('#st-cur').value.trim()||'₹';n.currencyWord=$('#st-cw').value.trim();n.phone=$('#st-ph').value.trim();n.address=$('#st-ad').value.trim();saveSet(n);toast('Settings saved — live on all devices')};
- $('#expBtn').onclick=()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES()};
+ $('#expBtn').onclick=async()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES()};
+  try{const lg=await DB.collection('logins').get();data.logins=lg.docs.map(d=>Object.assign({id:d.id},d.data()))}catch(e){}
   const b=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='munshi-backup-'+todayISO()+'.json';a.click();toast('Backup downloaded')};
  $('#impBtn').onclick=()=>$('#impFile').click();
  $('#impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
@@ -1565,8 +1628,9 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
     const cfg={businessName:d.settings.businessName||'Munshi Traders',currency:d.settings.currency||'₹',currencyWord:d.settings.currencyWord||'',phone:d.settings.phone||'',address:d.settings.address||''};
     await DB.collection('settings').doc('config').set(cfg);
     if(d.settings.counters)await DB.collection('settings').doc('counters').set(d.settings.counters);
-    for(const c of ['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites']){
+    for(const c of COLLECTION_KEYS){
      if(Array.isArray(d[c])&&d[c].length)await bulkWrite(c,d[c])}
+    if(Array.isArray(d.logins)&&d.logins.length)await bulkWrite('logins',d.logins);
     for(const usr of (d.users||[])){if(usr.mobile)await DB.collection('logins').doc(String(usr.mobile)).set({email:mobileToEmail(String(usr.mobile))},{merge:true})}
     toast('Import complete — reset passwords in Users to activate sign-ins')})}
   catch(err){toast('Not a valid Munshi backup','err')}};rd.readAsText(f)};
@@ -1574,6 +1638,7 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
  const wb=$('#wipeBtn');if(wb)wb.onclick=()=>confirmBox('Wipe all data?','Every record in Firestore will be permanently deleted. Export a backup first!',async()=>{
   toast('Wiping…');
   for(const c of COLLECTION_KEYS)await bulkDelete(c,(state[c]||[]).map(x=>x.id));
+  try{const lg=await DB.collection('logins').get();await bulkDelete('logins',lg.docs.map(d=>d.id))}catch(e){}
   await DB.collection('settings').doc('config').delete().catch(()=>{});
   await DB.collection('settings').doc('counters').delete().catch(()=>{});
   toast('Wiped — sign in again and run setup');logout()})}
@@ -1592,11 +1657,12 @@ async function seedDemo(){
  await bulkWrite('parties',customers.concat(suppliers));
  const custIds=customers.map(c=>c.id),supIds=suppliers.map(c=>c.id),modes=['Cash','UPI','Bank','Card'];
  const demoParty=customers[1];
- const demoUid=await createAuthUser('9999900000@munshi.app','1234');
- const db2=DB.batch();
- db2.set(DB.collection('users').doc(demoUid),{name:'Gupta Telecom (Demo)',mobile:'9999900000',role:'customer',partyId:demoParty.id,active:true,created:Date.now()});
- db2.set(DB.collection('logins').doc('9999900000'),{email:'9999900000@munshi.app'});
- await db2.commit();
+ let demoUid='demo-cust';
+ try{demoUid=await createAuthUser('9999900000@munshi.app','1234');
+  const db2=DB.batch();
+  db2.set(DB.collection('users').doc(demoUid),{name:'Gupta Telecom (Demo)',mobile:'9999900000',role:'customer',partyId:demoParty.id,active:true,created:Date.now()});
+  db2.set(DB.collection('logins').doc('9999900000'),{email:'9999900000@munshi.app'});
+  await db2.commit()}catch(e){console.warn('demo customer exists',e)}
  const salesA=[],purchA=[],sretA=[],pretA=[],recA=[],payA=[],ordA=[];
  const mkOL=()=>{const lines=[],used=new Set();for(let k=0;k<ri(2,4);k++){const it=pick(items);if(used.has(it.id))continue;used.add(it.id);lines.push({itemId:it.id,qty:ri(2,8),rate:it.saleRate})}return lines};
  const l1=mkOL(),s1=sum(l1,x=>x.qty*x.rate);
