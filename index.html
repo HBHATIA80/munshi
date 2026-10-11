@@ -298,14 +298,14 @@ const FIREBASE_CONFIG={
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
 const SETUP_CODE='HARVINDER-BHATIA-1505';
-const APP_VERSION='v3.1';
+const APP_VERSION='v3.2';
 
 /* ============ utils (hardened) ============ */
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const sum=(a,f)=>(Array.isArray(a)?a:[]).reduce((x,y)=>x+(+f(y)||0),0);
-function groupBy(a,f){const m={};if(!Array.isArray(a))return m;a.forEach(x=>{const k=f(x);(m[k]=m[k]||[]).push(x)});return m}
+function groupBy(a,f){const m={};if(!Array.isArray(a))return m;const get=(typeof f==='function')?f:(x=>x[f]);a.forEach(x=>{const k=get(x);(m[k]=m[k]||[]).push(x)});return m}
 const LINES=d=>Array.isArray(d&&d.lines)?d.lines:[];
 const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[],setupOK:false,dashCheck:null};
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
