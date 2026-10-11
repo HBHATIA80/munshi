@@ -234,7 +234,6 @@ body.locked{overflow:hidden}
 .livewrap{display:flex;align-items:center;gap:8px;font:500 11px var(--mono);color:var(--ink2)}
 .livewrap i{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 1.6s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-/* item photos + zoom */
 .pimg{position:relative;width:100%;height:112px;border-radius:10px;overflow:hidden;background:#EFECE2}
 .pimg img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .45s cubic-bezier(.2,.7,.3,1)}
 .pcard:hover .pimg img,.pcard:focus-within .pimg img{transform:scale(1.7)}
@@ -247,7 +246,6 @@ body.locked{overflow:hidden}
 .photopick{display:flex;gap:12px;align-items:center}
 .photopick .pv{width:76px;height:76px;border-radius:12px;overflow:hidden;background:#EFECE2;display:flex;align-items:center;justify-content:center;color:var(--ink3);flex:none}
 .photopick .pv img{width:100%;height:100%;object-fit:cover}
-/* dashboard v2 */
 .poswrap{background:var(--green-ink);border-radius:16px;color:#EAF0EA;padding:18px 18px 14px;margin-bottom:14px;position:relative;overflow:hidden}
 .posgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 26px}
 .posval{font:700 clamp(20px,4.5vw,30px)/1.15 var(--mono);letter-spacing:-.02em;margin-top:4px}
@@ -290,11 +288,7 @@ body.locked{overflow:hidden}
 
 <script>
 'use strict';
-/* ================================================================
-   STEP 1 — Firebase config (your project, already filled in)
-   This block is an identifier, NOT a secret. Security comes from
-   the Firestore RULES published in the Firebase console.
-   ================================================================ */
+/* Firebase config (your project — filled in). Security comes from the Firestore RULES. */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyBFuvEGEhc7vC2j6XgH9bb6PnR-NjIfwDo",
   authDomain:"munshi-91aa9.firebaseapp.com",
@@ -303,25 +297,26 @@ const FIREBASE_CONFIG={
   messagingSenderId:"369936746338",
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
-/* STEP 2 — secret key that unlocks the one-time owner setup at yoursite/#/setup */
 const SETUP_CODE='HARVINDER-BHATIA-1505';
+const APP_VERSION='v3.1';
 
-/* ============ utils ============ */
+/* ============ utils (hardened) ============ */
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const sum=(a,f)=>a.reduce((x,y)=>x+(+f(y)||0),0);
+const sum=(a,f)=>(Array.isArray(a)?a:[]).reduce((x,y)=>x+(+f(y)||0),0);
+function groupBy(a,f){const m={};if(!Array.isArray(a))return m;a.forEach(x=>{const k=f(x);(m[k]=m[k]||[]).push(x)});return m}
+const LINES=d=>Array.isArray(d&&d.lines)?d.lines:[];
 const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[],setupOK:false,dashCheck:null};
-function groupBy(a,f){const m={};a.forEach(x=>{const k=f(x);(m[k]=m[k]||[]).push(x)});return m}
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function monthStart(iso){return iso.slice(0,8)+'01'}
 function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'})}
-function timeAgo(ts){const s=(Date.now()-ts)/1000;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
+function timeAgo(ts){const s=(Date.now()-(+ts||0))/1000;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 function normMobile(v){let d=String(v||'').replace(/\D/g,'');if(d.length>10&&d.startsWith('91'))d=d.slice(-10);if(d.length===11&&d.startsWith('0'))d=d.slice(1);return d}
 const validMobile=d=>/^\d{10}$/.test(d);
-const money=n=>{n=+n||0;const neg=n<-0.004,cur=SET().currency||'₹',loc=(cur==='₹'||/^Rs/.test(cur))?'en-IN':'en-US';return (neg?'-':'')+cur+Math.abs(n).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2})};
-function compact(n){n=Math.abs(+n||0);const cur=SET().currency||'₹';if(n>=1e7)return cur+(n/1e7).toFixed(1)+'Cr';if(n>=1e5)return cur+(n/1e5).toFixed(1)+'L';if(n>=1e3)return cur+(n/1e3).toFixed(1)+'k';return cur+Math.round(n)}
+const money=n=>{n=+n;if(!isFinite(n))n=0;const neg=n<-0.004,cur=SET().currency||'₹',loc=(cur==='₹'||/^Rs/.test(cur))?'en-IN':'en-US';return (neg?'-':'')+cur+Math.abs(n).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2})};
+function compact(n){n=Math.abs(+n||0);if(!isFinite(n))n=0;const cur=SET().currency||'₹';if(n>=1e7)return cur+(n/1e7).toFixed(1)+'Cr';if(n>=1e5)return cur+(n/1e5).toFixed(1)+'L';if(n>=1e3)return cur+(n/1e3).toFixed(1)+'k';return cur+Math.round(n)}
 function numWords(n){n=Math.round(+n||0);const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'],b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
  const two=t=>t<20?a[t]:b[Math.floor(t/10)]+(t%10?' '+a[t%10]:'');
  const three=x=>Math.floor(x/100)?a[Math.floor(x/100)]+' Hundred'+(x%100?' '+two(x%100):''):two(x);
@@ -335,7 +330,14 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
-/* ============ image helpers (compress in-browser, store in Firestore) ============ */
+/* ============ visible error trap (never a silent blank page again) ============ */
+function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
+ const host=document.getElementById('view');
+ if(host){host.innerHTML=html}else{document.getElementById('app').innerHTML=`<div style="padding:24px;max-width:640px;margin:0 auto">${html}</div>`}}catch(_){}}
+window.addEventListener('error',e=>{showFatal(e.message+' (line '+e.lineno+')')});
+window.addEventListener('unhandledrejection',e=>{const r=e.reason;showFatal((r&&r.message)?r.message:String(r))});
+
+/* ============ image helpers ============ */
 function resizeImage(file,maxEdge,quality){return new Promise((res,rej)=>{
  const rd=new FileReader();
  rd.onload=()=>{const img=new Image();
@@ -357,13 +359,13 @@ let auth=null,DB=null;
 const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],settings:null,counters:null,myParty:null};
 const COLLECTION_KEYS=['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites'];
 const LS={get(k,d){try{const v=localStorage.getItem('munshi_'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){localStorage.setItem('munshi_'+k,JSON.stringify(v))},del(k){localStorage.removeItem('munshi_'+k)}};
-const USERS=()=>state.users,PARTIES=()=>state.parties,CATS=()=>state.categories,BRANDS=()=>state.brands,ITEMS=()=>state.items;
-const SALES=()=>state.sales,PURCHASES=()=>state.purchases,SRET=()=>state.saleReturns,PRET=()=>state.purchaseReturns,RECEIPTS=()=>state.receipts,PAYMENTS=()=>state.payments;
-const ORDERS=()=>state.orders,ADJ=()=>state.stockAdj,RESETS=()=>state.pwResets,INVITES=()=>state.invites;
+const USERS=()=>state.users||[],PARTIES=()=>state.parties||[],CATS=()=>state.categories||[],BRANDS=()=>state.brands||[],ITEMS=()=>state.items||[];
+const SALES=()=>state.sales||[],PURCHASES=()=>state.purchases||[],SRET=()=>state.saleReturns||[],PRET=()=>state.purchaseReturns||[],RECEIPTS=()=>state.receipts||[],PAYMENTS=()=>state.payments||[];
+const ORDERS=()=>state.orders||[],ADJ=()=>state.stockAdj||[],RESETS=()=>state.pwResets||[],INVITES=()=>state.invites||[];
 function dbAdd(c,o){const id=c==='invites'?o.code:(o.id||uid());const doc=Object.assign({},o,{id});DB.collection(c).doc(id).set(doc).catch(e=>{console.error('save',c,e);toast('Save failed: '+e.code,'err')});return doc}
 function dbUpdate(c,id,p){const d=Object.assign({},p);delete d.id;DB.collection(c).doc(id).set(d,{merge:true}).catch(e=>{console.error('update',c,e);toast('Update failed: '+e.code,'err')})}
 function dbDel(c,id){DB.collection(c).doc(id).delete().catch(e=>{console.error('del',c,e);toast('Delete failed: '+e.code,'err')})}
-function dbGet(c,id){return state[c]?.find(x=>x.id===id)}
+function dbGet(c,id){return (state[c]||[]).find(x=>x.id===id)}
 const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
 function SET(){const base={businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:''};const cfg=state.settings||{};const c=Object.assign({},base,cfg);c.counters=state.counters||{};return c}
 function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address,welcomed:!!s.welcomed};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
@@ -439,22 +441,22 @@ async function adminResetPw(user,newPw){
  await batch.commit();
  return newUid}
 
-/* ============ computed: stock / ledger ============ */
-function stockOf(itemId){let q=(itemById(itemId)?.openingStock)||0;
- PURCHASES().forEach(d=>d.lines.forEach(l=>{if(l.itemId===itemId)q+=+l.qty}));
- SALES().forEach(d=>d.lines.forEach(l=>{if(l.itemId===itemId)q-=+l.qty}));
- PRET().forEach(d=>{if(d.goodsBack!==false)d.lines.forEach(l=>{if(l.itemId===itemId)q-=+l.qty})});
- SRET().forEach(d=>{if(d.goodsBack!==false)d.lines.forEach(l=>{if(l.itemId===itemId)q+=+l.qty})});
- ADJ().forEach(a=>{if(a.itemId===itemId)q+=+a.delta});
+/* ============ computed: stock / ledger (hardened) ============ */
+function stockOf(itemId){let q=+(itemById(itemId)?.openingStock)||0;
+ PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q+=(+l.qty||0)}));
+ SALES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)}));
+ PRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)})});
+ SRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{if(l.itemId===itemId)q+=(+l.qty||0)})});
+ ADJ().forEach(a=>{if(a&&a.itemId===itemId)q+=(+a.delta||0)});
  return q}
-function avgCost(it){let q=+it.openingStock||0,v=q*(+it.openingRate||+it.purchaseRate||0);
- PURCHASES().forEach(d=>d.lines.forEach(l=>{if(l.itemId===it.id){q+=+l.qty;v+=l.qty*l.rate}}));
- ADJ().forEach(a=>{if(a.itemId===it.id&&+a.delta>0&&+a.rate)v+=+a.delta*+a.rate,q+=+a.delta});
- return q>0?v/q:(+it.purchaseRate||+it.openingRate||0)}
+function avgCost(it){let q=+(it.openingStock)||0,v=q*(+(it.openingRate)||+(it.purchaseRate)||0);
+ PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===it.id){q+=(+l.qty||0);v+=(+l.qty||0)*(+l.rate||0)}}));
+ ADJ().forEach(a=>{if(a&&a.itemId===it.id&&+a.delta>0&&+a.rate)v+=(+a.delta)*(+a.rate),q+=(+a.delta)});
+ return q>0?v/q:((+(it.purchaseRate))||(+(it.openingRate))||0)}
 function stockRows(){return ITEMS().map(it=>{const qty=stockOf(it.id);return{it,qty,ac:avgCost(it),value:qty*avgCost(it)}}).sort((a,b)=>b.value-a.value)}
-function docSub(d){return sum(d.lines,l=>l.qty*l.rate)}
-function saleLinesOf(invs){const rows=[];invs.forEach(d=>{const sub=docSub(d);d.lines.forEach(l=>{const g=l.qty*l.rate;rows.push({itemId:l.itemId,qty:+l.qty,gross:g,net:g-((+d.discount||0)*(sub?g/sub:0)),date:d.date})})});return rows}
-function purchaseLinesOf(docs){const rows=[];docs.forEach(d=>d.lines.forEach(l=>rows.push({itemId:l.itemId,qty:+l.qty,amt:l.qty*l.rate,date:d.date})));return rows}
+function docSub(d){return sum(LINES(d),l=>(+l.qty||0)*(+l.rate||0))}
+function saleLinesOf(invs){const rows=[];(invs||[]).forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0);rows.push({itemId:l.itemId,qty:+l.qty||0,gross:g,net:g-((+d.discount||0)*(sub?g/sub:0)),date:d.date})})});return rows}
+function purchaseLinesOf(docs){const rows=[];(docs||[]).forEach(d=>LINES(d).forEach(l=>rows.push({itemId:l.itemId,qty:+l.qty||0,amt:(+l.qty||0)*(+l.rate||0),date:d.date})));return rows}
 function partyEntries(pid){const es=[];const p=partyById(pid);if(!p)return es;
  if(+p.openingBalance)es.push({date:p.openingDate||'2000-01-01',desc:'Opening Balance',ref:'',dr:p.openingType==='cr'?0:+p.openingBalance,cr:p.openingType==='cr'?+p.openingBalance:0,pr:0,_c:0});
  SALES().filter(d=>d.partyId===pid).forEach(d=>{es.push({date:d.date,desc:'Sale Invoice',ref:d.no,dr:+d.total,cr:0,pr:1,_c:d.created,link:'sales/view/'+d.id});if(+d.paid)es.push({date:d.date,desc:'Cash with invoice',ref:d.no,dr:0,cr:+d.paid,pr:2,_c:d.created})});
@@ -526,13 +528,13 @@ function closeSheet(){$('#sheetRoot').innerHTML='';document.body.classList.remov
 document.addEventListener('click',e=>{const a=e.target.closest('[data-close-sheet]');if(a)closeSheet()});
 const sel=(v,cur)=>v===cur?'selected':'';
 function showLoading(msg){$('#app').innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)"><div class="card cardpad" style="text-align:center;max-width:340px"><div class="mark" style="margin:0 auto 12px">M</div><b style="font:700 17px var(--disp)">Munshi</b><p class="muted" style="font-size:13px;margin-top:6px">${esc(msg||'Connecting to your books…')}</p></div></div>`}
-function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b>, find <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span> at the top of the script, and paste the config object from your Firebase project. Also set your own <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">SETUP_CODE</span> and publish the Firestore security rules.</p></div></div>`}
+function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b> and paste your Firebase config into <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span>.</p></div></div>`}
 
 /* ============ auth screens ============ */
 function authShell(inner){
  $('#app').innerHTML=`<div class="authwrap">
   <div class="aleft ruled-bg">
-    <div style="display:flex;align-items:center;gap:12px"><div class="mark">M</div><div><b style="font:800 22px var(--disp);letter-spacing:-.01em;color:#F2F6F0">Munshi</b><div style="font:500 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8FA795">Books · Stock · Orders</div></div></div>
+    <div style="display:flex;align-items:center;gap:12px"><div class="mark">M</div><div><b style="font:800 22px var(--disp);letter-spacing:-.01em;color:#F2F6F0">Munshi</b><div style="font:500 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8FA795">${APP_VERSION} · Books · Stock · Orders</div></div></div>
     <h2 style="font:700 clamp(30px,4vw,44px)/1.12 var(--disp);letter-spacing:-.02em;margin-top:44px;max-width:440px;color:#F4F7F1">Every accessory,<br>accounted for.</h2>
     <p style="margin-top:14px;color:#A7BCAD;max-width:400px;font-size:14.5px">Live shared books on Google Firebase — invoices, returns, ledgers, stock and a direct ordering portal, in sync on every device.</p>
     <div class="aruled">
@@ -709,7 +711,7 @@ function renderShell(){
   return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}">${ic(it[2],17)}${it[1]}${b}</a>`};
  $('#app').innerHTML=`
  <aside class="side">
-   <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>${isCust?'Customer portal':'Live · Firebase'}</span></div></div>
+   <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
    <nav id="sideNav">${nav.map(g=>(g.g?`<div class="sgroup">${g.g}</div>`:'')+g.items.map(linkHtml).join('')).join('')}</nav>
    <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
  </aside>
@@ -754,7 +756,7 @@ function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalan
  </div><div style="height:10px"></div>`);
  $('#acOut').onclick=logout;$('#acPw').onclick=()=>{closeSheet();openSelfPwModal()}}
 
-/* ============ dashboard (v2 — full redesign) ============ */
+/* ============ dashboard (v2, hardened) ============ */
 function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
  const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
  SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
@@ -783,8 +785,8 @@ function drawCheckBody(){const dc=S.dashCheck;let f=dc.from||'2000-01-01',t=dc.t
  const gP=sum(purs,d=>d.total),rP=sum(prets,d=>d.total),netP=gP-rP;
  const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
  let rev=0,cogs=0;
- invs.forEach(d=>{const sub=docSub(d);d.lines.forEach(l=>{const g=l.qty*l.rate,net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=l.qty*AC(l.itemId)})});
- rets.forEach(rt=>{rt.lines.forEach(l=>{const c=rt.goodsBack!==false?l.qty*AC(l.itemId):0;rev-=l.qty*l.rate;cogs-=c})});
+ invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
+ rets.forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})});
  const profit=rev-cogs,mg=rev>0.004?(profit/rev*100):0;
  const collected=sum(invs,d=>+d.paid)+sum(RECEIPTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
  const paidOut=sum(purs,d=>+d.paid)+sum(PAYMENTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
@@ -819,20 +821,17 @@ function vDash(){
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
  if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
  const ms=monthStart(t);
- /* money position */
  const bm=balancesMap();let recv=0,pay=0,recvN=0,payN=0;
  Object.entries(bm).forEach(([pid,b])=>{if(b>0.004){recv+=b;recvN++}else if(b<-0.004){pay+=-b;payN++}});
  const topDebt=Object.entries(bm).map(([pid,b])=>({p:partyById(pid),b})).filter(x=>x.p&&x.b>0.004).sort((a,b)=>b.b-a.b).slice(0,5);
- /* month figures */
  const mS=SALES().filter(d=>d.date>=ms),mP=PURCHASES().filter(d=>d.date>=ms);
  const mSales=sum(mS,d=>d.total),mPur=sum(mP,d=>d.total);
  const mRet=sum(SRET().filter(d=>d.date>=ms),d=>d.total),mNet=mSales-mRet;
  const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
  let rev=0,cogs=0;
- mS.forEach(d=>{const sub=docSub(d);d.lines.forEach(l=>{const g=l.qty*l.rate,net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=l.qty*AC(l.itemId)})});
- SRET().filter(d=>d.date>=ms).forEach(rt=>{rt.lines.forEach(l=>{const c=rt.goodsBack!==false?l.qty*AC(l.itemId):0;rev-=l.qty*l.rate;cogs-=c})});
+ mS.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
+ SRET().filter(d=>d.date>=ms).forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})});
  const mProfit=rev-cogs,mMargin=rev>0.004?mProfit/rev*100:0;
- /* stock + today */
  const sr=stockRows();const stC=sum(sr,x=>x.value),stS=sum(sr,x=>x.qty*(+x.it.saleRate||0));
  const daySales=sum(SALES().filter(d=>d.date===t),d=>d.total),yS=sum(SALES().filter(d=>d.date===y),d=>d.total);
  const dayPur=sum(PURCHASES().filter(d=>d.date===t),d=>d.total),yP=sum(PURCHASES().filter(d=>d.date===y),d=>d.total);
@@ -863,8 +862,8 @@ function vDash(){
  <div class="poswrap ruled-bg">
    <div class="poshdr"><span class="lbl" style="color:#8FA795">Business position</span><span class="mono" style="font-size:10.5px;color:#8FA795">as of ${fmtDate(t)}</span></div>
    <div class="posgrid">
-     <div class="poscell" data-go="parties" style="cursor:pointer"><span class="lbl" style="color:#8FA795">Receivable · ${recvN} part${recvN===1?'y':'ies'}</span><div class="posval" style="color:#7FD0A5" data-v="${recv}">0</div><div class="kpiD" style="color:#AFC3B2">customers owe you</div></div>
-     <div class="poscell" data-go="parties" style="cursor:pointer"><span class="lbl" style="color:#8FA795">Payable · ${payN} part${payN===1?'y':'ies'}</span><div class="posval" style="color:#E7A18F" data-v="${pay}">0</div><div class="kpiD" style="color:#AFC3B2">you owe suppliers</div></div>
+     <div data-go="parties" style="cursor:pointer"><span class="lbl" style="color:#8FA795">Receivable · ${recvN} part${recvN===1?'y':'ies'}</span><div class="posval" style="color:#7FD0A5" data-v="${recv}">0</div><div class="kpiD" style="color:#AFC3B2">customers owe you</div></div>
+     <div data-go="parties" style="cursor:pointer"><span class="lbl" style="color:#8FA795">Payable · ${payN} part${payN===1?'y':'ies'}</span><div class="posval" style="color:#E7A18F" data-v="${pay}">0</div><div class="kpiD" style="color:#AFC3B2">you owe suppliers</div></div>
      <div class="netrow">
        <div><span class="lbl" style="color:#8FA795">Net position</span><div class="mono" style="font:700 15px var(--mono);color:${net>=0?'#7FD0A5':'#E7A18F'}">${money(Math.abs(net))} ${Math.abs(net)<0.004?'settled':net>=0?'in our favour':'against us'}</div></div>
        <div style="text-align:right"><span class="lbl" style="color:#8FA795">Stock @ cost</span><div class="mono" style="font:700 15px var(--mono);color:#E5C687">${compact(stC)}</div></div>
@@ -894,7 +893,7 @@ function vDash(){
      ${topDebt.length?topDebt.map(x=>`<div class="lowrow" data-go="parties/${x.p.id}" style="cursor:pointer"><div style="min-width:0"><b style="font:600 13.5px var(--disp)">${esc(x.p.name)}</b><div class="bsub">${esc(x.p.type)} · ${esc(x.p.phone||'—')}</div></div><span class="badge b-green">${money(x.b)}</span></div>`).join(''):`<div class="muted" style="text-align:center;padding:18px 0">${ic('check',20)} <span style="display:inline-block;vertical-align:middle">Nothing outstanding — well collected.</span></div>`}
    </div></div>
    <div class="card"><div class="cardhead"><span class="lbl">Live orders</span><a class="btn btn-ghost btn-sm" href="#/orders">All orders</a></div><div class="cardpad">
-     ${liveOrd.length?liveOrd.map(o=>{const p=partyById(o.partyId);return `<div class="lowrow" data-go="orders/${o.id}" style="cursor:pointer"><div style="min-width:0"><b style="font:600 13.5px var(--disp)"><span class="mono" style="font-size:12.5px">${esc(o.no)}</span> · ${esc(p?p.name:'—')}</b><div class="bsub">${o.lines.length} item${o.lines.length>1?'s':''} · ${timeAgo(o.created)}</div></div>${ostBadge(o.status)}</div>`}).join(''):`<div class="muted" style="text-align:center;padding:18px 0">No open orders right now.</div>`}
+     ${liveOrd.length?liveOrd.map(o=>{const p=partyById(o.partyId);return `<div class="lowrow" data-go="orders/${o.id}" style="cursor:pointer"><div style="min-width:0"><b style="font:600 13.5px var(--disp)"><span class="mono" style="font-size:12.5px">${esc(o.no)}</span> · ${esc(p?p.name:'—')}</b><div class="bsub">${LINES(o).length} item${LINES(o).length>1?'s':''} · ${timeAgo(o.created)}</div></div>${ostBadge(o.status)}</div>`}).join(''):`<div class="muted" style="text-align:center;padding:18px 0">No open orders right now.</div>`}
    </div></div>
    <div class="card"><div class="cardhead"><span class="lbl">Low stock${low.length?` <span class="nbadge" style="margin-left:6px">${low.length}</span>`:''}</span><a class="btn btn-ghost btn-sm" href="#/r/stock">Valuation</a></div><div class="cardpad">
      ${low.length?low.map(r=>`<div class="lowrow"><div style="min-width:0"><b style="font:600 13.5px var(--disp)">${esc(r.it.name)}</b><div class="bsub">${esc(brandById(r.it.brandId)?.name||'')} · ${esc(catById(r.it.categoryId)?.name||'')}</div></div><span class="badge ${r.qty<=0?'b-red':'b-amber'}"><span class="mono">${r.qty}</span>&nbsp;left</span></div>`).join(''):`<div class="muted" style="text-align:center;padding:18px 0">${ic('check',20)} <span style="display:inline-block;vertical-align:middle">Everything above its alert level.</span></div>`}
@@ -904,7 +903,7 @@ function vDash(){
    </div></div>
  </div>
  <div class="card" style="margin-top:14px"><div class="cardhead"><span class="lbl">Recent activity</span></div><div class="cardpad" style="padding-top:4px">
-   ${feed.length?feed.map(d=>{const f=FM[d._t],p=partyById(d.partyId);return `<div class="feedrow" data-go="${f[4]}"><span class="ftype" style="background:${f[2]};color:${f[3]}">${ic(f[0],16)}</span><div class="lmain"><div class="lname">${f[1]}${d.no?' · <span class="mono" style="font-size:12px">'+esc(d.no)+'</span>':''}</div><div class="lsub">${esc(p?p.name:'—')} · ${timeAgo(d.created||Date.now())}</div></div><div class="lright"><div class="lamt">${money(d.total||d.amount||0)}</div></div></div>`}).join(''):`<div class="muted" style="text-align:center;padding:14px 0">Transactions will appear here.</div>`}
+   ${feed.length?feed.map(d=>{const f=FM[d._t]||FM.sale,p=partyById(d.partyId);return `<div class="feedrow" data-go="${f[4]}"><span class="ftype" style="background:${f[2]};color:${f[3]}">${ic(f[0],16)}</span><div class="lmain"><div class="lname">${f[1]}${d.no?' · <span class="mono" style="font-size:12px">'+esc(d.no)+'</span>':''}</div><div class="lsub">${esc(p?p.name:'—')} · ${timeAgo(d.created||Date.now())}</div></div><div class="lright"><div class="lamt">${money(d.total||d.amount||0)}</div></div></div>`}).join(''):`<div class="muted" style="text-align:center;padding:14px 0">Transactions will appear here.</div>`}
  </div></div>`;
  qsa('.kpiV[data-v],.posval[data-v]').forEach(el=>countUp(el,+el.dataset.v));
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
@@ -949,7 +948,7 @@ function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash 
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
  let q='';
  const draw=()=>{const all=state[D.coll]||[];
-  const fl=all.slice().sort((a,b)=>b.date===a.date?(b.created||0)-(a.created||0):b.date.localeCompare(a.date))
+  const fl=all.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||((b.created||0)-(a.created||0)))
    .filter(d=>{const p=partyById(d.partyId);return !q||(d.no||'').toLowerCase().includes(q)||(p&&p.name.toLowerCase().includes(q))});
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${D.title}s</div><div class="psub">${fl.length} documents · ${money(sum(fl,d=>d.total))} total</div></div><a class="btn btn-primary" href="#/${D.path}/new">${ic('plus',16)}New</a></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="dq" placeholder="Search by no. or party…" value="${esc(q)}"></div>
@@ -967,7 +966,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  const st={partyId:ed?ed.partyId:'',date:ed?ed.date:todayISO(),lines:ed?ed.lines.map(l=>({...l})):[{itemId:'',qty:1,rate:0}],discount:ed?(+ed.discount||0):0,paid:ed?(+ed.paid||0):0,payMode:ed?ed.payMode||'Cash':'Cash',note:ed?ed.note||'':'',goodsBack:ed?ed.goodsBack!==false:true,settle:ed?ed.settle:'credit',cashAmount:ed?(+ed.cashAmount||0):0,cashTouched:!!ed};
  let draft=null;
  if(type==='sale'&&S.draftOrder){draft=dbGet('orders',S.draftOrder);
-  if(draft){st.partyId=draft.partyId;st.lines=draft.lines.map(l=>({itemId:l.itemId,qty:+l.qty,rate:+l.rate}))}}
+  if(draft){st.partyId=draft.partyId;st.lines=LINES(draft).map(l=>({itemId:l.itemId,qty:+l.qty,rate:+l.rate}))}}
  const partyOpts=PARTIES().filter(p=>p.type===D.partyKind||p.type==='both').map(p=>`<option value="${p.id}" ${sel(p.id,st.partyId)}>${esc(p.name)}</option>`).join('');
  V().innerHTML=`
  <div class="pagehead"><div><span class="lbl">${ed?'Editing':'New document'}</span><div class="ptitle">${ed?esc(ed.no):nextPreview(D.no)}</div><div class="psub">${D.title} · ${D.partyKind}</div></div></div>
@@ -1087,7 +1086,7 @@ function vDocView(type,id){const D=DOC[type],d=dbGet(D.coll,id);setTop(D.title,D
      ${D.isReturn?`<span class="muted" style="font-size:12.5px">${d.goodsBack!==false?(type==='saleReturn'?'Goods returned to stock':'Goods returned to supplier'):'No goods movement'} · ${d.settle==='cash'?'cash '+money(d.cashAmount)+' '+(type==='saleReturn'?'refunded':'received'):'credit note in ledger'}</span>`:`<span class="muted" style="font-size:12.5px">${d.payMode||''}</span>`}
    </div>
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
-   ${d.lines.map(l=>{const it=itemById(l.itemId);return `<div class="lgrow"><span class="ld"><b>${esc(it?it.name:'?')}</b><span>${esc(catById(it?.categoryId)?.name||'')}${it?.brandId?' · '+esc(brandById(it.brandId)?.name||''):''}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money(l.qty*l.rate)}</span></div>`}).join('')}
+   ${LINES(d).map(l=>{const it=itemById(l.itemId);return `<div class="lgrow"><span class="ld"><b>${esc(it?it.name:'?')}</b><span>${esc(catById(it?.categoryId)?.name||'')}${it?.brandId?' · '+esc(brandById(it.brandId)?.name||''):''}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow"><span class="muted">Subtotal</span><b>${money(d.subtotal)}</b></div>
      ${D.isReturn?'':`<div class="trow"><span class="muted">Discount</span><b>-${money(d.discount||0)}</b></div>`}
@@ -1103,7 +1102,7 @@ function printDoc(type,id){const D=DOC[type],d=dbGet(D.coll,id),s=SET(),p=partyB
   <div class="phead"><div><h1>${esc(s.businessName)}</h1><div style="font-size:12px;color:#555">${esc(s.address||'')}${s.phone?' · '+esc(s.phone):''}</div></div><div class="pmeta"><b style="font-size:15px">${D.title.toUpperCase()}</b><br>${esc(d.no)}<br>${fmtDate(d.date)}</div></div>
   <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:13px"><div><span style="font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#777">${D.partyKind}</span><br><b>${esc(p?p.name:'—')}</b>${p&&p.phone?'<br>'+esc(p.phone):''}${p&&p.address?'<br>'+esc(p.address):''}</div></div>
   <table class="ptable"><tr><th style="width:28px">#</th><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr>
-  ${d.lines.map((l,i)=>{const it=itemById(l.itemId);return `<tr><td>${i+1}</td><td>${esc(it?it.name:'?')}</td><td class="r">${l.qty}</td><td class="r">${money(l.rate)}</td><td class="r">${money(l.qty*l.rate)}</td></tr>`}).join('')}</table>
+  ${LINES(d).map((l,i)=>{const it=itemById(l.itemId);return `<tr><td>${i+1}</td><td>${esc(it?it.name:'?')}</td><td class="r">${l.qty}</td><td class="r">${money(l.rate)}</td><td class="r">${money((+l.qty||0)*(+l.rate||0))}</td></tr>`}).join('')}</table>
   <div class="ptot">
     <div class="tr"><span>Subtotal</span><span>${money(d.subtotal)}</span></div>
     ${D.isReturn?'':`<div class="tr"><span>Discount</span><span>-${money(d.discount||0)}</span></div>`}
@@ -1177,7 +1176,7 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
    qsa('[data-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();openItemModal(itemById(b.dataset.edit))});
    qsa('[data-stk]').forEach(b=>b.onclick=e=>{e.stopPropagation();openStockModal(itemById(b.dataset.stk))});
    qsa('[data-del]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.del;
-    const used=[SALES,PURCHASES,SRET,PRET].some(c=>c().some(d=>d.lines.some(l=>l.itemId===id)));
+    const used=[SALES,PURCHASES,SRET,PRET].some(c=>c().some(d=>LINES(d).some(l=>l.itemId===id)));
     if(used)return toast('Item is used in documents — cannot delete','err');
     confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted')})})}
   $('#iq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
@@ -1274,7 +1273,7 @@ function vLedger(pid){setTop('Ledger');setActiveNav('ledger');
 /* ============ collections / payments ============ */
 function vMoneyList(kind){const isR=kind==='receipt';setTop(isR?'Collections':'Payments');setActiveNav(isR?'collections':'payments');
  const coll=isR?RECEIPTS():PAYMENTS(),path=isR?'collections':'payments';
- const draw=()=>{const rows=coll.slice().sort((a,b)=>b.date===a.date?(b.created||0)-(a.created||0):b.date.localeCompare(a.date));
+ const draw=()=>{const rows=coll.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||((b.created||0)-(a.created||0)));
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${isR?'Collections':'Payments'}</div><div class="psub">${rows.length} entries · ${money(sum(rows,r=>r.amount))}</div></div><a class="btn btn-primary" href="#/${path}/new">${ic('plus',16)}New</a></div>
   <div class="card"><div class="list">${rows.length?rows.map(r=>{const p=partyById(r.partyId);
    return `<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(p?p.name:'—')}</div><div class="lsub"><span>${fmtDate(r.date)}</span><span>·</span><span>${esc(r.mode||'')}</span>${r.note?'<span>·</span><span>'+esc(r.note)+'</span>':''}</div></div>
@@ -1403,10 +1402,10 @@ function vReportCollection(){setTop('Collection Analysis');setActiveNav('r/colle
   const recs=RECEIPTS().filter(x=>inR(x.date,f,t)),invP=SALES().filter(d=>inR(d.date,f,t)&&+d.paid>0);
   const total=sum(recs,x=>x.amount)+sum(invP,d=>+d.paid);
   let body='';const tab=r.tab;
-  const dayTotal=d=>sum(recs.filter(x=>x.date===d),x=>x.amount)+sum(invP.filter(x=>x.date===d),x=>x.paid);
+  const dayTotal=d=>sum(recs.filter(x=>x.date===d),x=>x.amount)+sum(invP.filter(x=>x.date===d),x=>+x.paid);
   if(tab==='date'){const dates=[...new Set([...recs.map(x=>x.date),...invP.map(d=>d.date)])].sort();
    const mx=Math.max(1,...dates.map(dayTotal));
-   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(recs.filter(x=>x.date===d),x=>x.amount),b=sum(invP.filter(x=>x.date===d),x=>x.paid);
+   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(recs.filter(x=>x.date===d),x=>x.amount),b=sum(invP.filter(x=>x.date===d),x=>+x.paid);
     return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">receipts ${money(a)} · with invoices ${money(b)}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--green)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('down','No collections in this period')}
   else{const g=groupBy([...recs.map(x=>({pid:x.partyId,amt:x.amount})),...invP.map(d=>({pid:d.partyId,amt:+d.paid}))],'pid');
    const arr=Object.keys(g).map(k=>({p:partyById(k),amt:sum(g[k],x=>x.amt)})).filter(x=>x.p).sort((a,b)=>b.amt-a.amt);
@@ -1423,10 +1422,10 @@ function vReportPayment(){setTop('Payment Analysis');setActiveNav('r/payment');S
   const pays=PAYMENTS().filter(x=>inR(x.date,f,t)),purP=PURCHASES().filter(d=>inR(d.date,f,t)&&+d.paid>0),src=SRET().filter(d=>inR(d.date,f,t)&&d.settle==='cash');
   const total=sum(pays,x=>x.amount)+sum(purP,d=>+d.paid)+sum(src,d=>d.cashAmount);
   let body='';const tab=r.tab;
-  const dayTotal=d=>sum(pays.filter(x=>x.date===d),x=>x.amount)+sum(purP.filter(x=>x.date===d),x=>x.paid)+sum(src.filter(x=>x.date===d),x=>x.cashAmount);
+  const dayTotal=d=>sum(pays.filter(x=>x.date===d),x=>x.amount)+sum(purP.filter(x=>x.date===d),x=>+x.paid)+sum(src.filter(x=>x.date===d),x=>x.cashAmount);
   if(tab==='date'){const dates=[...new Set([...pays.map(x=>x.date),...purP.map(d=>d.date),...src.map(d=>d.date)])].sort();
    const mx=Math.max(1,...dates.map(dayTotal));
-   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(pays.filter(x=>x.date===d),x=>x.amount),b=sum(purP.filter(x=>x.date===d),x=>x.paid),c=sum(src.filter(x=>x.date===d),x=>x.cashAmount);
+   body=dates.length?dates.slice().reverse().map(d=>{const a=sum(pays.filter(x=>x.date===d),x=>x.amount),b=sum(purP.filter(x=>x.date===d),x=>+x.paid),c=sum(src.filter(x=>x.date===d),x=>x.cashAmount);
     return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">payments ${money(a)} · with invoices ${money(b)}${c?' · customer refund '+money(c):''}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--red)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('up','No payments in this period')}
   else{const g=groupBy([...pays.map(x=>({pid:x.partyId,amt:x.amount})),...purP.map(d=>({pid:d.partyId,amt:+d.paid}))],'pid');
    const arr=Object.keys(g).map(k=>({p:partyById(k),amt:sum(g[k],x=>x.amt)})).filter(x=>x.p).sort((a,b)=>b.amt-a.amt);
@@ -1444,8 +1443,8 @@ function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.re
   const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
   let rev=0,cogs=0;const rows=[];
   const push=(dimK,net,cost)=>{let row=rows.find(x=>x.k===dimK);if(!row){row={k:dimK,rev:0,cogs:0};rows.push(row)}row.rev+=net;row.cogs+=cost};
-  invs.forEach(d=>{const sub=docSub(d);d.lines.forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=l.qty*l.rate,net=g-((+d.discount||0)*(sub?g/sub:0)),c=l.qty*AC(l.itemId);rev+=net;cogs+=c;push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c)})});
-  rets.forEach(rt=>{rt.lines.forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=l.qty*l.rate,c=rt.goodsBack!==false?l.qty*AC(l.itemId):0;rev-=net;cogs-=c;push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c)})});
+  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0)),c=(+l.qty||0)*AC(l.itemId);rev+=net;cogs+=c;push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c)})});
+  rets.forEach(rt=>{LINES(rt).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=(+l.qty||0)*(+l.rate||0),c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=net;cogs-=c;push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c)})});
   const profit=rev-cogs,margin=rev>0?profit/rev*100:0;
   const label=k=>k.startsWith('d:')?fmtDate(k.slice(2)):k.startsWith('i:')?(itemById(k.slice(2))?.name||'—'):(catById(k.slice(2))?.name||'—');
   let body='';const tab=r.tab,pre={date:'d:',item:'i:',category:'c:'}[tab];
@@ -1471,7 +1470,7 @@ function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
   <div class="tabs">${['all','new','confirmed','delivered','invoiced','cancelled'].map(s=>`<button class="chip ${f===s?'on':''}" data-of="${s}">${s==='all'?'All':OSTAT[s][0]}${counts[s]?` <span class="mono" style="opacity:.7">${counts[s]}</span>`:''}</button>`).join('')}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="oq" placeholder="Search order no. or customer…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${fl.length?fl.map(o=>{const p=partyById(o.partyId);
-   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${o.lines.length} item${o.lines.length>1?'s':''}</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders here</div>Orders placed by customers appear instantly.</div>`}</div></div>`;
+   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${LINES(o).length} item${LINES(o).length>1?'s':''}</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders here</div>Orders placed by customers appear instantly.</div>`}</div></div>`;
   qsa('[data-of]').forEach(b=>b.onclick=()=>{f=b.dataset.of;draw()});
   $('#oq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#oq');n.focus();n.setSelectionRange(pos,pos)};
   qsa('.lrow').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
@@ -1495,8 +1494,8 @@ function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  ${staff?`<div class="card" style="margin-bottom:14px"><div class="cardpad" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><span class="avatar">${(p?p.name:'?').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</span><div style="flex:1"><b style="font:600 14px var(--disp)">${esc(p?p.name:'—')}</b><div class="lsub"><span>${esc(p?.phone||'')}</span>${p?`<span>·</span><a href="#/parties/${p.id}" style="color:var(--green);font-weight:600">open ledger</a>`:''}</div></div></div></div>`:''}
  <div class="card" style="margin-bottom:14px"><div class="cardpad">
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
-   ${o.lines.map(l=>{const it=itemById(l.itemId);const so=it?stockOf(it.id):0;
-    return `<div class="lgrow">${itemThumb(it,34)}<span class="ld"><b>${esc(it?it.name:'?')}</b><span>${it&&l.qty>so?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money(l.qty*l.rate)}</span></div>`}).join('')}
+   ${LINES(o).map(l=>{const it=itemById(l.itemId);const so=it?stockOf(it.id):0;
+    return `<div class="lgrow">${itemThumb(it,34)}<span class="ld"><b>${esc(it?it.name:'?')}</b><span>${(!isCustomer&&it&&l.qty>so)?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow grand"><span>Order total</span><b style="font-size:18px">${money(o.total)}</b></div>
    </div>
@@ -1523,7 +1522,7 @@ function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
    return `<div class="pcard" data-id="${i.id}">
      ${img}
      <div><div class="pbrand">${esc(brandById(i.brandId)?.name||'')}</div><div class="pname">${esc(i.name)}</div></div>
-     <div class="prow"><span class="pprice">${money(i.saleRate)}</span><span class="badge ${so<=0?'b-red':so<=(+i.low||10)?'b-amber':'b-green'}">${so<=0?'Out':so+' left'}</span></div>
+     <div class="prow"><span class="pprice">${money(i.saleRate)}</span><span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span></div>
      <button class="btn btn-primary btn-sm" data-add="${i.id}" ${so<=0?'disabled':''}>${ic('cart',15)}Add to cart</button>
    </div>`}).join(''):`<div class="empty" style="grid-column:1/-1">${ic('box',34)}<div class="big">No products found</div></div>`}</div>`;
   $('#sq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#sq');n.focus();n.setSelectionRange(pos,pos)};
@@ -1540,7 +1539,7 @@ function openShopItem(it){if(!it)return;const so=stockOf(it.id);let q=1;
   <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(catById(it.categoryId)?.name||'')}</div>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
     <span class="pprice" style="font-size:20px">${money(it.saleRate)}</span>
-    <span class="badge ${so<=0?'b-red':so<=(+it.low||10)?'b-amber':'b-green'}">${so<=0?'Out of stock':so+' in stock'}</span>
+    <span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span>
   </div>
   ${so>0?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
     <div class="stepper"><button type="button" id="qm">−</button><span id="qv">1</span><button type="button" id="qp">+</button></div>
@@ -1559,12 +1558,12 @@ function vCart(){setTop('Cart');setActiveNav('cart');
   V().innerHTML=`
   <div class="pagehead"><div><div class="ptitle">Cart</div><div class="psub">${c.length} product${c.length!==1?'s':''} · ${cartCount()} pcs</div></div></div>
   ${c.length?`<div class="card cardpad">
-    ${c.map(x=>`<div class="cartrow">${itemThumb(x.it,38)}<div class="lmain"><div class="lname">${esc(x.it.name)}</div><div class="lsub"><span>${money(x.it.saleRate)} each</span>${x.l.qty>stockOf(x.it.id)?`<span style="color:var(--red)">only ${stockOf(x.it.id)} in stock</span>`:''}</div></div>
+    ${c.map(x=>`<div class="cartrow">${itemThumb(x.it,38)}<div class="lmain"><div class="lname">${esc(x.it.name)}</div><div class="lsub"><span>${money(x.it.saleRate)} each</span>${x.l.qty>stockOf(x.it.id)?`<span style="color:var(--red)">limited stock — may be adjusted</span>`:''}</div></div>
     <div class="stepper"><button data-m="${x.it.id}">−</button><span>${x.l.qty}</span><button data-p="${x.it.id}">+</button></div>
     <div class="lamt" style="min-width:78px;text-align:right">${money(x.l.qty*x.it.saleRate)}</div>
     <button class="icon-btn" data-rm="${x.it.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`).join('')}
     <div class="field" style="margin-top:14px"><label class="fl">Note for us (optional)</label><input class="in" id="c-note" placeholder="e.g. deliver before 6 pm"></div>
-    ${short.length?`<div class="notice red">${ic('alert',15)}<div>Some quantities exceed current stock — they will be capped when you place the order.</div></div>`:''}
+    ${short.length?`<div class="notice">${ic('alert',15)}<div>Some items have limited stock — quantities may be adjusted when we confirm your order.</div></div>`:''}
     <div class="trow grand"><span>Order total</span><b style="font-size:19px">${money(total)}</b></div>
     <div class="savebar"><a class="btn btn-ghost" href="#/shop">Keep shopping</a><button class="btn btn-primary" id="placeOrder">${ic('check',16)}Place order</button></div>
   </div>`:`<div class="card"><div class="empty">${ic('cart',34)}<div class="big">Your cart is empty</div>Browse the shop and add products.<div style="margin-top:14px"><a class="btn btn-primary" href="#/shop">Go to shop</a></div></div></div>`}`;
@@ -1585,8 +1584,8 @@ function vMyOrders(){setTop('My Orders');setActiveNav('my-orders');
  V().innerHTML=`
  <div class="pagehead"><div><div class="ptitle">My Orders</div><div class="psub">${os.length} order${os.length!==1?'s':''} placed · statuses update live</div></div><a class="btn btn-primary" href="#/shop">${ic('plus',16)}New order</a></div>
  <div class="card"><div class="list">${os.length?os.map(o=>{
-  const first=itemById(o.lines[0]?.itemId);
-  return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(first?first.name:'—')}${o.lines.length>1?' +'+(o.lines.length-1)+' more':''}</span><span>·</span><span>${o.lines.reduce((a,l)=>a+ +l.qty,0)} pcs</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders yet</div>Your placed orders and their status will show here.<div style="margin-top:14px"><a class="btn btn-primary" href="#/shop">Start shopping</a></div></div>`}</div></div>`;
+  const first=itemById((LINES(o)[0]||{}).itemId);
+  return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(first?first.name:'—')}${LINES(o).length>1?' +'+(LINES(o).length-1)+' more':''}</span><span>·</span><span>${LINES(o).reduce((a,l)=>a+(+l.qty||0),0)} pcs</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders yet</div>Your placed orders and their status will show here.<div style="margin-top:14px"><a class="btn btn-primary" href="#/shop">Start shopping</a></div></div>`}</div></div>`;
  qsa('.lrow').forEach(r=>r.onclick=()=>go('my-orders/'+r.dataset.id))}
 
 /* ============ users / customers / invites (admin) ============ */
@@ -1752,6 +1751,7 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
        ${can.wipe(u)?`<button class="btn btn-ghost" id="wipeBtn" style="color:var(--red)">${ic('trash',16)}Wipe everything</button>`:''}
      </div></div></div>
    <div class="card"><div class="cardhead"><span class="lbl">At a glance</span></div><div class="cardpad">
+     <div class="lgrow"><span class="ld"><b>App version</b><span>${APP_VERSION}</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">Munshi</span></div>
      <div class="lgrow"><span class="ld"><b>Documents</b><span>sales · purchases · returns</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${SALES().length+PURCHASES().length+SRET().length+PRET().length}</span></div>
      <div class="lgrow"><span class="ld"><b>Orders</b><span>customer portal</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${ORDERS().filter(o=>o.status==='new').length} waiting / ${ORDERS().length} total</span></div>
      <div class="lgrow"><span class="ld"><b>Parties</b><span>customers & suppliers</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${PARTIES().length}</span></div>
@@ -1834,8 +1834,9 @@ async function seedDemo(){
  await DB.collection('stockAdj').add({itemId:items[6].id,delta:-2,rate:0,reason:'Damaged / dead stock',date:addDays(todayISO(),-3),by:S.me.name,created:Date.now()-3*864e5});
  const st=SET();saveSet(Object.assign({},st,{welcomed:true}))}
 
-/* ============ router & boot ============ */
+/* ============ router & boot (error-trapped) ============ */
 function route(){
+ try{
  const raw=location.hash||'',p=raw.replace(/^#\//,'').split('/').filter(Boolean),u=S.me;
  if(p[0]==='login'){if(u){go(u.role==='customer'?'shop':'dash');return}renderLogin();return}
  if(p[0]==='setup'){if(u){go(u.role==='customer'?'shop':'dash');return}renderSetup();return}
@@ -1872,10 +1873,12 @@ function route(){
   if(map[p[1]])return map[p[1]]()}
  if(a==='users'){if(!can.users(u)){toast('Admin only','err');return vDash()}return vUsers()}
  if(a==='settings'){if(!can.settings(u)){toast('Admin only','err');return vDash()}return vSettings()}
- go('dash')}
+ go('dash');
+ }catch(e){console.error(e);showFatal(e.message)}}
 window.addEventListener('hashchange',route);
 window.closeModal=closeModal;
 (function boot(){
+ console.log('Munshi '+APP_VERSION);
  if(!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.startsWith('PASTE')){renderConfigNeeded();return}
  firebase.initializeApp(FIREBASE_CONFIG);
  auth=firebase.auth();DB=firebase.firestore();
@@ -1895,7 +1898,7 @@ window.closeModal=closeModal;
    S.booting=false;renderShell();
    const cur=(location.hash||'').replace(/^#\//,'').split('/')[0];
    if(['login','setup','join'].includes(cur)||!cur)go(me.role==='customer'?'shop':'dash');else route();
-  }catch(e){console.error(e);S.booting=false;showLoading('Connection problem ('+(e.code||e.message)+') — check internet and refresh.')}
+  }catch(e){console.error(e);S.booting=false;showFatal('Connection problem: '+(e.code||e.message)+' — check internet and refresh.')}
  });
 })();
 </script>
