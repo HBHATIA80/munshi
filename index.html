@@ -298,13 +298,14 @@ const FIREBASE_CONFIG={
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
 const SETUP_CODE='HARVINDER-BHATIA-1505';
-const APP_VERSION='v3.2';
+const APP_VERSION='v3.3';
 
 /* ============ utils (hardened) ============ */
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const sum=(a,f)=>(Array.isArray(a)?a:[]).reduce((x,y)=>x+(+f(y)||0),0);
+/* groupBy accepts a function OR a field name */
 function groupBy(a,f){const m={};if(!Array.isArray(a))return m;const get=(typeof f==='function')?f:(x=>x[f]);a.forEach(x=>{const k=get(x);(m[k]=m[k]||[]).push(x)});return m}
 const LINES=d=>Array.isArray(d&&d.lines)?d.lines:[];
 const S={report:{},draftOrder:null,usersTab:'team',me:null,booting:true,unsubs:[],setupOK:false,dashCheck:null};
@@ -330,7 +331,7 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
-/* ============ visible error trap (never a silent blank page again) ============ */
+/* ============ visible error trap ============ */
 function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
  const host=document.getElementById('view');
  if(host){host.innerHTML=html}else{document.getElementById('app').innerHTML=`<div style="padding:24px;max-width:640px;margin:0 auto">${html}</div>`}}catch(_){}}
@@ -376,7 +377,8 @@ function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+St
 function session(){return S.me}
 function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
 const RANK={customer:0,staff:1,admin:2,super:3};
-const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2};
+const isMgr=()=>S.me&&RANK[S.me.role]>=2;
+const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2,profit:u=>u&&RANK[u.role]>=2};
 function subscribeAll(me){
  if(me.role==='customer'){
   const sub=(c,q)=>{let ref=DB.collection(c);if(q)ref=ref.where(q.f,'==',q.v);
@@ -405,7 +407,7 @@ const cartCount=()=>sum(cartGet(),l=>l.qty);
 function cartAdd(id,qty){const it=itemById(id);if(!it)return;const st=stockOf(id);
  if(st<=0)return toast('Out of stock','err');
  const c=cartGet();const l=c.find(x=>x.itemId===id);const cur=l?l.qty:0;const want=Math.min(st,cur+qty);
- if(want<=cur)return toast('Only '+st+' in stock','err');
+ if(want<=cur)return toast('Limited stock — try a lower quantity','err');
  if(l)l.qty=want;else c.push({itemId:id,qty:want});cartSet(c);toast('Added to cart')}
 function cartSetQty(id,qty){const c=cartGet();const i=c.findIndex(x=>x.itemId===id);if(i<0)return;
  const st=stockOf(id);qty=Math.max(0,Math.min(st,qty));if(!qty)c.splice(i,1);else c[i].qty=qty;cartSet(c)}
@@ -508,11 +510,12 @@ const DOC={
  purchaseReturn:{coll:'purchaseReturns',no:'PR',title:'Purchase Return',one:'Purchase Return',partyKind:'supplier',rateKey:'purchaseRate',path:'purchase-returns',isReturn:true,cashLabel:'Receive cash now',color:'var(--amber)'}};
 const OSTAT={new:['New','b-amber'],confirmed:['Confirmed','b-gray'],delivered:['Delivered','b-green'],invoiced:['Invoiced','b-green'],cancelled:['Cancelled','b-red']};
 const ostBadge=s=>{const o=OSTAT[s]||['?','b-gray'];return `<span class="badge ${o[1]}">${o[0]}</span>`};
+/* level flag: 2 = admin & super only. Profit Analysis is admin-only. */
 const NAVG=[
  {g:'Operations',items:[['dash','Home','home'],['orders','Orders','order'],['sales','Sale Invoices','bag'],['purchases','Purchase Invoices','truck'],['sale-returns','Sale Returns','in'],['purchase-returns','Purchase Returns','out']]},
  {g:'Masters',items:[['parties','Parties','users'],['items','Items','box'],['categories','Categories','tag'],['brands','Brands','layers']]},
  {g:'Money',items:[['ledger','Ledger','book'],['collections','Collections','down'],['payments','Payments','up']]},
- {g:'Insights',items:[['r/stock','Stock Valuation','box'],['r/sales','Sales Analysis','chart'],['r/purchase','Purchase Analysis','chart'],['r/profit','Profit Analysis','in'],['r/collection','Collection Analysis','down'],['r/payment','Payment Analysis','up']]},
+ {g:'Insights',items:[['r/stock','Stock Valuation','box'],['r/sales','Sales Analysis','chart'],['r/purchase','Purchase Analysis','chart'],['r/profit','Profit Analysis','in',2],['r/collection','Collection Analysis','down'],['r/payment','Payment Analysis','up']]},
  {g:'Admin',items:[['users','Users & Customers','user',2],['settings','Settings','gear',2]]}];
 const navItems=u=>NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
@@ -742,8 +745,8 @@ function userSheet(){const u=S.me;
  openSheet(`<div class="shhead"><div style="display:flex;gap:11px;align-items:center"><span class="avatar" style="width:40px;height:40px;font-size:14px">${u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}</span><div><b style="font:700 15px var(--disp);display:block">${esc(u.name)}</b><span class="lbl">${u.role==='super'?'Super admin':u.role} · ${esc(u.mobile||'')}</span></div></div><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
  <div class="shg"><span class="lbl">Account</span>
   <button class="shlink" style="width:100%;text-align:left" id="shPw">${ic('gear',18)}Change my password<span class="chev">${ic('back',15)}</span></button>
-  <a class="shlink" href="#/settings" data-close-sheet>${ic('gear',18)}Settings<span class="chev">${ic('back',15)}</span></a>
-  ${RANK[u.role]>=2?`<a class="shlink" href="#/users" data-close-sheet>${ic('user',18)}Manage users & customers<span class="chev">${ic('back',15)}</span></a>`:''}
+  ${RANK[u.role]>=2?`<a class="shlink" href="#/settings" data-close-sheet>${ic('gear',18)}Settings<span class="chev">${ic('back',15)}</span></a>
+  <a class="shlink" href="#/users" data-close-sheet>${ic('user',18)}Manage users & customers<span class="chev">${ic('back',15)}</span></a>`:''}
   <button class="shlink" style="width:100%;text-align:left;color:var(--red)" id="shOut">${ic('logout',18)}Sign out<span class="chev">${ic('back',15)}</span></button>
  </div><div style="height:10px"></div>`);
  $('#shOut').onclick=logout;$('#shPw').onclick=()=>{closeSheet();openSelfPwModal()}}
@@ -756,7 +759,7 @@ function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalan
  </div><div style="height:10px"></div>`);
  $('#acOut').onclick=logout;$('#acPw').onclick=()=>{closeSheet();openSelfPwModal()}}
 
-/* ============ dashboard (v2, hardened) ============ */
+/* ============ dashboard (v2, hardened, role-aware) ============ */
 function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
  const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
  SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
@@ -771,7 +774,7 @@ function dashCheckCard(){if(!S.dashCheck)S.dashCheck={preset:'month',...mk(prese
  const dc=S.dashCheck;
  const chips=[['today','Today'],['7d','7 days'],['month','This month'],['lmonth','Last month'],['30d','30 days'],['all','All']];
  return `<div class="card" style="margin-bottom:14px">
-  <div class="cardhead"><span class="lbl">Period check · sales · purchase · profit</span><span class="muted mono" style="font-size:11px" id="dcHeadDates">${fmtDate(dc.from)} → ${fmtDate(dc.to)}</span></div>
+  <div class="cardhead"><span class="lbl">Period check · sales · purchase${isMgr()?' · profit':''}</span><span class="muted mono" style="font-size:11px" id="dcHeadDates">${fmtDate(dc.from)} → ${fmtDate(dc.to)}</span></div>
   <div class="cardpad">
    <div class="tabs" style="margin-bottom:6px">${chips.map(c=>`<button class="chip ${dc.preset===c[0]?'on':''}" data-dc="${c[0]}">${c[1]}</button>`).join('')}</div>
    <div class="rdates" style="margin-top:2px;margin-bottom:12px"><input type="date" class="in" id="dcFrom" value="${dc.from}"><span class="muted">→</span><input type="date" class="in" id="dcTo" value="${dc.to}"></div>
@@ -779,14 +782,16 @@ function dashCheckCard(){if(!S.dashCheck)S.dashCheck={preset:'month',...mk(prese
   </div></div>`}
 function drawCheckBody(){const dc=S.dashCheck;let f=dc.from||'2000-01-01',t=dc.to||todayISO();
  if(f>t){const x=f;f=t;t=x}
+ const showProfit=isMgr();
  const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
  const purs=PURCHASES().filter(d=>inR(d.date,f,t)),prets=PRET().filter(d=>inR(d.date,f,t));
  const gS=sum(invs,d=>d.total),rS=sum(rets,d=>d.total),netS=gS-rS;
  const gP=sum(purs,d=>d.total),rP=sum(prets,d=>d.total),netP=gP-rP;
  const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
  let rev=0,cogs=0;
- invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
- rets.forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})});
+ if(showProfit){
+  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
+  rets.forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})})}
  const profit=rev-cogs,mg=rev>0.004?(profit/rev*100):0;
  const collected=sum(invs,d=>+d.paid)+sum(RECEIPTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
  const paidOut=sum(purs,d=>+d.paid)+sum(PAYMENTS().filter(x=>inR(x.date,f,t)),x=>x.amount);
@@ -794,8 +799,8 @@ function drawCheckBody(){const dc=S.dashCheck;let f=dc.from||'2000-01-01',t=dc.t
  el.innerHTML=`<div class="sumrow" style="margin-bottom:10px">
   ${sumTile('Net sales',money(netS),'var(--green)')}
   ${sumTile('Net purchases',money(netP),'var(--red)')}
-  ${sumTile('Gross profit',money(profit),profit>=0?'var(--green)':'var(--red)')}
-  ${sumTile('Margin',rev>0.004?mg.toFixed(1)+'%':'—',profit>=0?'var(--green)':'var(--red)')}
+  ${showProfit?sumTile('Gross profit',money(profit),profit>=0?'var(--green)':'var(--red)'):''}
+  ${showProfit?sumTile('Margin',rev>0.004?mg.toFixed(1)+'%':'—',profit>=0?'var(--green)':'var(--red)'):''}
  </div>
  <div style="border-top:1px dashed var(--line);padding-top:8px;max-width:560px">
   <div class="trow"><span class="muted">Gross sales · ${invs.length} inv − returns · ${rets.length}</span><b>${money(gS)} − ${money(rS)}</b></div>
@@ -819,6 +824,7 @@ function bindDashCheck(){
 function vDash(){
  setTop('Dashboard');setActiveNav('dash');
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
+ const mgr=isMgr();
  if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
  const ms=monthStart(t);
  const bm=balancesMap();let recv=0,pay=0,recvN=0,payN=0;
@@ -829,8 +835,9 @@ function vDash(){
  const mRet=sum(SRET().filter(d=>d.date>=ms),d=>d.total),mNet=mSales-mRet;
  const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
  let rev=0,cogs=0;
- mS.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
- SRET().filter(d=>d.date>=ms).forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})});
+ if(mgr){
+  mS.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0));rev+=net;cogs+=(+l.qty||0)*AC(l.itemId)})});
+  SRET().filter(d=>d.date>=ms).forEach(rt=>{LINES(rt).forEach(l=>{const c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=(+l.qty||0)*(+l.rate||0);cogs-=c})})}
  const mProfit=rev-cogs,mMargin=rev>0.004?mProfit/rev*100:0;
  const sr=stockRows();const stC=sum(sr,x=>x.value),stS=sum(sr,x=>x.qty*(+x.it.saleRate||0));
  const daySales=sum(SALES().filter(d=>d.date===t),d=>d.total),yS=sum(SALES().filter(d=>d.date===y),d=>d.total);
@@ -859,7 +866,7 @@ function vDash(){
    <a class="qa" href="#/orders">${ic('order',16)}Orders${newOrd?` <span class="nbadge">${newOrd}</span>`:''}</a>
    <a class="qa" href="#/items">${ic('box',16)}Items</a>
  </div>
- <div class="poswrap ruled-bg">
+ ${mgr?`<div class="poswrap ruled-bg">
    <div class="poshdr"><span class="lbl" style="color:#8FA795">Business position</span><span class="mono" style="font-size:10.5px;color:#8FA795">as of ${fmtDate(t)}</span></div>
    <div class="posgrid">
      <div data-go="parties" style="cursor:pointer"><span class="lbl" style="color:#8FA795">Receivable · ${recvN} part${recvN===1?'y':'ies'}</span><div class="posval" style="color:#7FD0A5" data-v="${recv}">0</div><div class="kpiD" style="color:#AFC3B2">customers owe you</div></div>
@@ -870,12 +877,12 @@ function vDash(){
        <div style="text-align:right"><span class="lbl" style="color:#8FA795">Stock @ sale</span><div class="mono" style="font:700 15px var(--mono);color:#7FD0A5">${compact(stS)}</div></div>
      </div>
    </div>
- </div>
+ </div>`:''}
  <div class="kpis">
    <div class="kpi tint-g" data-go="r/sales" style="cursor:pointer"><span class="lbl">Sales · this month</span><div class="kpiV" data-v="${mSales}">0</div><div class="kpiD">${mS.length} invoices · returns ${compact(mRet)}</div></div>
    <div class="kpi tint-r" data-go="r/purchase" style="cursor:pointer"><span class="lbl">Purchases · this month</span><div class="kpiV" data-v="${mPur}">0</div><div class="kpiD">${mP.length} invoices MTD</div></div>
-   <div class="kpi" data-go="r/profit" style="cursor:pointer"><span class="lbl">Gross profit · MTD</span><div class="kpiV" style="color:${mProfit>=0?'var(--green)':'var(--red)'}" data-v="${mProfit}">0</div><div class="kpiD">after returns & discounts</div></div>
-   <div class="kpi" data-go="r/profit" style="cursor:pointer"><span class="lbl">Margin · MTD</span><div class="kpiV" style="color:${mProfit>=0?'var(--green)':'var(--red)'}">${rev>0.004?mMargin.toFixed(1)+'%':'—'}</div><div class="kpiD">net ${compact(mNet)} trading</div></div>
+   ${mgr?`<div class="kpi" data-go="r/profit" style="cursor:pointer"><span class="lbl">Gross profit · MTD</span><div class="kpiV" style="color:${mProfit>=0?'var(--green)':'var(--red)'}" data-v="${mProfit}">0</div><div class="kpiD">after returns & discounts</div></div>
+   <div class="kpi" data-go="r/profit" style="cursor:pointer"><span class="lbl">Margin · MTD</span><div class="kpiV" style="color:${mProfit>=0?'var(--green)':'var(--red)'}">${rev>0.004?mMargin.toFixed(1)+'%':'—'}</div><div class="kpiD">net ${compact(mNet)} trading</div></div>`:''}
  </div>
  <div class="kpis">
    <div class="kpi tint-g"><span class="lbl">Sales · today</span><div class="kpiV" data-v="${daySales}">0</div><div class="kpiD">${yS?((d)=>(d>=0?'+':'')+Math.round(d*100/yS)+'% vs yesterday')(daySales-yS):'—'}</div></div>
@@ -889,9 +896,9 @@ function vDash(){
  </div>
  ${dashCheckCard()}
  <div class="dashgrid">
-   <div class="card"><div class="cardhead"><span class="lbl">Top receivables</span><a class="btn btn-ghost btn-sm" href="#/parties">All parties</a></div><div class="cardpad">
+   ${mgr?`<div class="card"><div class="cardhead"><span class="lbl">Top receivables</span><a class="btn btn-ghost btn-sm" href="#/parties">All parties</a></div><div class="cardpad">
      ${topDebt.length?topDebt.map(x=>`<div class="lowrow" data-go="parties/${x.p.id}" style="cursor:pointer"><div style="min-width:0"><b style="font:600 13.5px var(--disp)">${esc(x.p.name)}</b><div class="bsub">${esc(x.p.type)} · ${esc(x.p.phone||'—')}</div></div><span class="badge b-green">${money(x.b)}</span></div>`).join(''):`<div class="muted" style="text-align:center;padding:18px 0">${ic('check',20)} <span style="display:inline-block;vertical-align:middle">Nothing outstanding — well collected.</span></div>`}
-   </div></div>
+   </div></div>`:''}
    <div class="card"><div class="cardhead"><span class="lbl">Live orders</span><a class="btn btn-ghost btn-sm" href="#/orders">All orders</a></div><div class="cardpad">
      ${liveOrd.length?liveOrd.map(o=>{const p=partyById(o.partyId);return `<div class="lowrow" data-go="orders/${o.id}" style="cursor:pointer"><div style="min-width:0"><b style="font:600 13.5px var(--disp)"><span class="mono" style="font-size:12.5px">${esc(o.no)}</span> · ${esc(p?p.name:'—')}</b><div class="bsub">${LINES(o).length} item${LINES(o).length>1?'s':''} · ${timeAgo(o.created)}</div></div>${ostBadge(o.status)}</div>`}).join(''):`<div class="muted" style="text-align:center;padding:18px 0">No open orders right now.</div>`}
    </div></div>
@@ -1333,10 +1340,12 @@ function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.repo
     return `<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${sub}</span></div><div class="btrack"><i style="width:${Math.max(2,v/mx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join('')
     +`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">${basis==='cost'?'Total stock @ cost':'Total stock @ sale price'}</span><b style="font-size:17px">${money(basis==='cost'?totC:totS)}</b></div>`
     :emptyHtml('box','No items yet')}
-  else{const dim=tab==='brand'?'brandId':'categoryId';
-   const groups=groupBy(rows.filter(x=>x[dim]),x=>x[dim]);
-   const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=dim==='brand'?brandById(id):catById(id);
-    return{name:src?src.name:'—',qty:sum(g,x=>x.qty),cv:sum(g,x=>x.cv),sv:sum(g,x=>x.sv),profit:sum(g,x=>x.profit)}}).sort((a,b)=>val(b)-val(a));
+  else{
+   /* FIXED: read brandId/categoryId from x.it, include unassigned as its own bucket */
+   const dim=tab==='brand'?'brandId':'categoryId';
+   const groups=groupBy(rows,x=>(x.it&&x.it[dim])||'__na');
+   const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=id==='__na'?null:(dim==='brand'?brandById(id):catById(id));
+    return{name:src?src.name:'Unassigned',qty:sum(g,x=>x.qty),cv:sum(g,x=>x.cv),sv:sum(g,x=>x.sv),profit:sum(g,x=>x.profit)}}).sort((a,b)=>val(b)-val(a));
    const tot=sum(arr,a=>val(a))||1;
    if(tab==='category'&&arr.length){const cols=['#0C6B4A','#B23B2A','#A9720E','#16382A','#5B8A74','#C98A6B','#3E5C4B','#8FA795'];let acc=0;const stops=arr.map((a,i)=>{const s0=acc/tot*100;acc+=val(a);const s1=acc/tot*100;return `${cols[i%cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`}).join(',');
     body+=`<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none"><div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column"><span class="lbl">${basis==='cost'?'@ cost':'@ sale'}</span><b class="mono" style="font-size:14px">${compact(tot)}</b></div></div>
@@ -1352,7 +1361,7 @@ function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.repo
   <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${sumTile('Stock @ sale price',money(totS),'var(--amber)')}${sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
   ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise']])}
   <div class="card cardpad">${body}</div>
-  <p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today's selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses.</p>`;
+  <p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today's selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses. Items without a brand/category set appear under <b>Unassigned</b>.</p>`;
   qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
   bindTabs(key)};
  draw()}
@@ -1869,7 +1878,9 @@ function route(){
   if(p[1]==='new')return vMoneyForm(k,p[2]);
   if(p[1]==='edit')return vMoneyForm(k,null,p[2]);
   return vMoneyList(k)}
- if(a==='r'){const map={stock:vReportStock,sales:vReportSales,purchase:vReportPurchase,collection:vReportCollection,payment:vReportPayment,profit:vReportProfit};
+ if(a==='r'){
+  if(p[1]==='profit'&&!can.profit(u)){toast('Profit analysis is admin-only','err');return vDash()}
+  const map={stock:vReportStock,sales:vReportSales,purchase:vReportPurchase,collection:vReportCollection,payment:vReportPayment,profit:vReportProfit};
   if(map[p[1]])return map[p[1]]()}
  if(a==='users'){if(!can.users(u)){toast('Admin only','err');return vDash()}return vUsers()}
  if(a==='settings'){if(!can.settings(u)){toast('Admin only','err');return vDash()}return vSettings()}
