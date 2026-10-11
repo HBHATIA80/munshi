@@ -1079,7 +1079,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  const partyInput=$('#f-party-name');
  attachCombo(partyInput,{
   getPool:()=>PARTIES().filter(p=>p.type===D.partyKind||p.type==='both').sort((a,b)=>a.name.localeCompare(b.name))
-   .map(p=>({id:p.id,label:p.name,sub:`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))}`)),
+      .map(p=>({id:p.id,label:p.name,sub:`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))}`})),
   onPick:o=>{st.partyId=o.id;const p=partyById(o.id);
    $('#f-party-sub').textContent=p?`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))} ${partyBalance(p.id)>0?'Dr':'Cr'}`:''}
  });
