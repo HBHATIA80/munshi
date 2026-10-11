@@ -282,6 +282,16 @@ body.locked{overflow:hidden}
 .pcard .zfly{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:min(320px,74vw);height:320px;border:1px solid var(--line2);border-radius:14px;box-shadow:0 22px 50px -14px rgba(15,42,31,.5);background:#fff center/contain no-repeat;display:none;z-index:75;pointer-events:none}
 .pcard:hover .zfly{display:block}
 @media(hover:none){.pcard:hover .zfly{display:none}}
+/* item names always fully readable */
+.lgrow{font-size:14px}
+.lgrow .ld b{white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;line-height:1.35;font-size:14.5px}
+.lgrow .num{font-size:13px}
+.pname{-webkit-line-clamp:unset;min-height:0}
+.ldwrap{display:flex;gap:10px;align-items:flex-start}
+.ldwrap .imthumb{margin-top:2px;flex:none}
+.ldtxt{min-width:0;flex:1}
+.ldtxt b{display:block;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;line-height:1.35;font-size:14.5px}
+.ldtxt .lsub{margin-top:2px}
 #printArea{display:none}
 @media print{
   body.printing #app,body.printing #modalRoot,body.printing #toastRoot{display:none!important}
@@ -1607,7 +1617,7 @@ function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  <div class="card" style="margin-bottom:14px"><div class="cardpad">
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
    ${LINES(o).map(l=>{const it=itemById(l.itemId);const so=it?stockOf(it.id):0;
-    return `<div class="lgrow">${itemThumb(it,34)}<span class="ld"><b>${esc(it?it.name:'?')}</b><span>${(!isCustomer&&it&&l.qty>so)?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
+      return `<div class="lgrow"><span class="ld"><span class="ldwrap">${itemThumb(it,34)}<span class="ldtxt"><b>${esc(it?it.name:'?')}</b><span class="lsub">${(!isCustomer&&it&&l.qty>so)?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span></span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow grand"><span>Order total</span><b style="font-size:18px">${money(o.total)}</b></div>
    </div>
