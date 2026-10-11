@@ -1197,24 +1197,46 @@ function sumTile(l,v,c){return `<div class="sum"><span class="lbl">${l}</span><b
 function emptyHtml(icon,msg){return `<div class="empty">${ic(icon,34)}<div class="big">${msg}</div></div>`}
 function mk([f,t]){return{from:f,to:t}}
 
-function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item'};
- const key='stock';const draw=()=>{const tab=S.report[key].tab,rows=stockRows();
+function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
+ const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,basis=st.basis||'cost';
+  const rows=stockRows().map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
+  const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
+  const val=x=>basis==='cost'?x.cv:x.sv;
+  const barCol=basis==='cost'?'var(--green)':'var(--amber)';
   let body='';
-  if(tab==='item'){body=rows.length?rows.map(r=>`<div class="brow"><div><span class="bname">${esc(r.it.name)}</span><span class="bsub">${esc(catById(r.it.categoryId)?.name||'—')} · ${esc(brandById(r.it.brandId)?.name||'—')} · ${r.qty} pcs @ ${money(r.ac)}</span></div><div class="btrack"><i style="width:${rows[0].value?Math.max(2,r.value/rows[0].value*100):0}%;background:var(--green)"></i></div><div class="bv">${money(r.value)}</div></div>`).join('')+`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">Total stock value</span><b style="font-size:17px">${money(sum(rows,r=>r.value))}</b></div>`:emptyHtml('box','No items yet')}
+  if(tab==='item'){
+   const arr=rows.slice().sort((a,b)=>val(b)-val(a));const mx=Math.max(1,...arr.map(val));
+   body=arr.length?arr.map(x=>{const v=val(x);
+    const meta=`${esc(catById(x.it.categoryId)?.name||'—')} · ${esc(brandById(x.it.brandId)?.name||'—')}`;
+    const sub=basis==='cost'
+     ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
+     :`${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · <b style="color:${x.profit>=0?'var(--green)':'var(--red)'}">${x.profit>=0?'profit':'loss'} ${money(Math.abs(x.profit))}</b>`;
+    return `<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${sub}</span></div><div class="btrack"><i style="width:${Math.max(2,v/mx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join('')
+    +`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">${basis==='cost'?'Total stock @ cost':'Total stock @ sale price'}</span><b style="font-size:17px">${money(basis==='cost'?totC:totS)}</b></div>`
+    :emptyHtml('box','No items yet')}
   else{const dim=tab==='brand'?'brandId':'categoryId';
-   const groups=groupBy(rows.filter(r=>r[dim]),r=>r[dim]);
-   const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=dim==='brand'?brandById(id):catById(id);return{name:src?src.name:'—',qty:sum(g,r=>r.qty),value:sum(g,r=>r.value)}}).sort((a,b)=>b.value-a.value);
-   const tot=sum(arr,a=>a.value)||1;
-   if(tab==='category'&&arr.length){const cols=['#0C6B4A','#B23B2A','#A9720E','#16382A','#5B8A74','#C98A6B','#3E5C4B','#8FA795'];let acc=0;const stops=arr.map((a,i)=>{const s0=acc/tot*100;acc+=a.value;const s1=acc/tot*100;return `${cols[i%cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`}).join(',');
-    body+=`<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none"><div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column"><span class="lbl">Total</span><b class="mono" style="font-size:14px">${compact(tot)}</b></div></div>
-    <div style="flex:1;min-width:200px">${arr.map((a,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${cols[i%cols.length]}"></i>${esc(a.name)}</span><span class="mono muted">${(a.value/tot*100).toFixed(1)}% · ${money(a.value)}</span></div>`).join('')}</div></div>`}
-   body+=arr.length?arr.map(a=>barRow(a.name,a.qty+' pcs',a.value,arr[0].value,dim==='brand'?'var(--red)':'var(--green)')).join(''):emptyHtml('layers','Nothing to value yet')}
- V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Weighted-average cost · includes admin stock adjustments</div></div></div>
- ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise']])}
- <div class="card cardpad">${body}</div>`;
- bindTabs(key)};
+   const groups=groupBy(rows.filter(x=>x[dim]),x=>x[dim]);
+   const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=dim==='brand'?brandById(id):catById(id);
+    return{name:src?src.name:'—',qty:sum(g,x=>x.qty),cv:sum(g,x=>x.cv),sv:sum(g,x=>x.sv),profit:sum(g,x=>x.profit)}}).sort((a,b)=>val(b)-val(a));
+   const tot=sum(arr,a=>val(a))||1;
+   if(tab==='category'&&arr.length){const cols=['#0C6B4A','#B23B2A','#A9720E','#16382A','#5B8A74','#C98A6B','#3E5C4B','#8FA795'];let acc=0;const stops=arr.map((a,i)=>{const s0=acc/tot*100;acc+=val(a);const s1=acc/tot*100;return `${cols[i%cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`}).join(',');
+    body+=`<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none"><div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column"><span class="lbl">${basis==='cost'?'@ cost':'@ sale'}</span><b class="mono" style="font-size:14px">${compact(tot)}</b></div></div>
+    <div style="flex:1;min-width:200px">${arr.map((a,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${cols[i%cols.length]}"></i>${esc(a.name)}</span><span class="mono muted">${(val(a)/tot*100).toFixed(1)}% · ${money(val(a))}</span></div>`).join('')}</div></div>`}
+   const gmx=Math.max(1,...arr.map(val));
+   body+=arr.length?arr.map(a=>{const v=val(a);
+    return `<div class="brow"><div><span class="bname">${esc(a.name)}</span><span class="bsub">${a.qty} pcs · cost ${money(a.cv)} · sale ${money(a.sv)} · potential ${a.profit>=0?'+':'-'}${money(Math.abs(a.profit))}</span></div><div class="btrack"><i style="width:${Math.max(2,v/gmx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join(''):emptyHtml('layers','Nothing to value yet')}
+  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div></div></div>
+  <div class="tabs" style="margin-bottom:8px">
+   <button class="chip ${basis==='cost'?'on':''}" data-bs="cost">At Cost</button>
+   <button class="chip ${basis==='sale'?'on':''}" data-bs="sale">At Sale Price</button>
+  </div>
+  <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${sumTile('Stock @ sale price',money(totS),'var(--amber)')}${sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
+  ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise']])}
+  <div class="card cardpad">${body}</div>
+  <p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today's selling rates — potential revenue if everything sells at list price; the difference is your potential gross profit, before discounts and expenses.</p>`;
+  qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
+  bindTabs(key)};
  draw()}
-
 function vReportSales(){setTop('Sales Analysis');setActiveNav('r/sales');S.report.sales=S.report.sales||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='sales';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
   const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
