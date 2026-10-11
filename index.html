@@ -304,7 +304,7 @@ const FIREBASE_CONFIG={
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
 const SETUP_CODE='HARVINDER-BHATIA-1505';
-const APP_VERSION='v3.5';
+const APP_VERSION='v3.5.1';
 
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1005,7 +1005,7 @@ function bindPulse(){const svg=V().querySelector('#pHit');if(!svg)return;
   tip.innerHTML=`<b>${fmtDate(d)}</b><br><span class="tr"><i class="dot" style="background:#7FD0A5"></i>Sales ${money(st.sv[i])}</span><br><span class="tr"><i class="dot" style="background:#E7A18F"></i>Purch ${money(st.pv[i])}</span>`};
  svg.addEventListener('pointermove',draw);svg.addEventListener('pointerdown',draw);
  svg.addEventListener('pointerleave',()=>{['pguide','pd1','pd2'].forEach(id=>$('#'+id)&&$('#'+id).setAttribute('opacity',0));const t=$('#pTip');if(t)t.style.display='none'})}
-/* ============ doc list ============ */
+
 function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash settled':'Credit note';const b=(+d.total)-(+d.paid);return b<=0?'Paid':+d.paid>0?'Partial':'Unpaid'}
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
  let q='';
@@ -1079,7 +1079,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  const partyInput=$('#f-party-name');
  attachCombo(partyInput,{
   getPool:()=>PARTIES().filter(p=>p.type===D.partyKind||p.type==='both').sort((a,b)=>a.name.localeCompare(b.name))
-      .map(p=>({id:p.id,label:p.name,sub:`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))}`})),
+   .map(p=>({id:p.id,label:p.name,sub:`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))}`})),
   onPick:o=>{st.partyId=o.id;const p=partyById(o.id);
    $('#f-party-sub').textContent=p?`${p.type} · ${p.phone||'no phone'} · balance ${money(Math.abs(partyBalance(p.id)))} ${partyBalance(p.id)>0?'Dr':'Cr'}`:''}
  });
@@ -1233,7 +1233,7 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
   <div class="sum"><span class="lbl">Purchases to date</span><b>${money(sum(PURCHASES().filter(d=>d.partyId===id),d=>d.total))}</b></div>
  </div>
  <div class="card"><div class="cardhead"><span class="lbl">Ledger</span><span class="muted mono" style="font-size:11px">${es.length} entries</span></div><div class="cardpad" style="padding-top:6px">
-  ${es.length?es.map(e=>{run+=e.dr-e.cr;return `<div class="lgrow" ${e.link?`data-go="${e.link}" style="cursor:pointer"`:''}><span class="ld"><b>${esc(e.desc)}${e.memo?' <span class="badge b-gray">memo</span>':''}</b><span>${fmtDate(e.date)}${e.ref?' · '+esc(e.ref):''}</span></span><span class="num" style="color:var(--green)">${e.dr?money(e.dr):''}</span><span class="num" style="color:var(--red)">${e.cr?money(e.cr):''}</span><span class="num" style="font-weight:600;color:${run>0.004?'var(--green)':run<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(run))} ${Math.abs(run)<0.004?'':run>0?'Dr':'Cr'}</span></div>`}).join(''):`<div class="muted" style="text-align:center;padding:16px 0">No ledger entries yet.</div>`}
+  ${es.length?es.map(e=>{run+=e.dr-e.cr;return `<div class="lgrow" ${e.link?`data-go="${e.link}" style="cursor:pointer"`:''}><span class="ld"><b>${esc(e.desc)}${e.memo?' <span class="badge b-gray">memo</span>':''}</b><span>${fmtDate(e.date)}${e.ref?' · '+esc(e.ref):''}</span></span><span class="num" style="color:var(--green)">${e.dr?money(e.dr):''}</span><span class="num" style="color:var(--red)">${e.cr?money(e.cr):''}</span><span class="num" style="font-weight:600;color:${run>0.004?'var(--green)':run<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(run))} ${Math.abs(run)<0.004?'':run>0?'Dr':' Cr'}</span></div>`}).join(''):`<div class="muted" style="text-align:center;padding:16px 0">No ledger entries yet.</div>`}
  </div></div>`;
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
  $('#pdEdit').onclick=()=>openPartyModal(p)}
