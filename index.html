@@ -265,6 +265,23 @@ body.locked{overflow:hidden}
 .combo-it span{font:500 11px var(--mono);color:var(--ink2)}
 .combo-empty{padding:12px;color:var(--ink2);font-size:13px;text-align:center}
 .combo-sub{font:500 11px var(--mono);color:var(--ink2);margin-top:4px}
+/* product photos v2 — full image + side zoom */
+.pimg{height:180px;background:#fff}
+.pimg img{object-fit:contain}
+.pcard:hover .pimg img{transform:none!important}
+.modal.wide{max-width:920px}
+.pmgrid{display:grid;grid-template-columns:320px 1fr;gap:20px}
+@media(max-width:880px){.pmgrid{grid-template-columns:1fr}}
+.zstage{position:relative;background:#fff;border:1px solid var(--line);border-radius:12px;cursor:crosshair}
+.zstage>img{width:100%;height:300px;object-fit:contain;display:block}
+.zstage.zoomed{cursor:zoom-out}
+.zstage.zoomed>img{transform:scale(2)}
+.zpane{position:absolute;left:calc(100% + 14px);top:0;width:300px;height:300px;border:1px solid var(--line2);border-radius:12px;box-shadow:0 18px 44px -14px rgba(15,42,31,.45);background:#fff no-repeat;display:none;z-index:30;pointer-events:none}
+@media(max-width:880px){.zpane{display:none!important}}
+.pcard{position:relative}
+.pcard .zfly{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:min(320px,74vw);height:320px;border:1px solid var(--line2);border-radius:14px;box-shadow:0 22px 50px -14px rgba(15,42,31,.5);background:#fff center/contain no-repeat;display:none;z-index:75;pointer-events:none}
+.pcard:hover .zfly{display:block}
+@media(hover:none){.pcard:hover .zfly{display:none}}
 #printArea{display:none}
 @media print{
   body.printing #app,body.printing #modalRoot,body.printing #toastRoot{display:none!important}
@@ -1613,9 +1630,10 @@ function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
   <div class="tabs">${['all',...CATS().map(c=>c.id)].map(id=>{const c=id==='all'?null:catById(id);return `<button class="chip ${cf===id?'on':''}" data-cf="${id}">${id==='all'?'All':esc(c?c.name:'…')}</button>`}).join('')}</div>
   <div class="pgrid">${items.length?items.map(i=>{const so=stockOf(i.id),t=tileFor(i.categoryId||i.name);
    const img=i.photo?`<div class="pimg"><img src="${i.photo}" loading="lazy" alt="${esc(i.name)}"><span class="phZ">${ic('search',12)}ZOOM</span></div>`:`<div class="ptile" style="background:${t[0]};color:${t[1]}">${esc(i.name[0]||'?')}</div>`;
-   return `<div class="pcard" data-id="${i.id}">
-     ${img}
-     <div><div class="pbrand">${esc(brandById(i.brandId)?.name||'')}</div><div class="pname">${esc(i.name)}</div></div>
+     return `<div class="pcard" data-id="${i.id}">
+     ${i.photo?`<span class="zfly" style="background-image:url('${i.photo}')"></span>`:''}
+     ${img}   
+  <div><div class="pbrand">${esc(brandById(i.brandId)?.name||'')}</div><div class="pname">${esc(i.name)}</div></div>
      <div class="prow"><span class="pprice">${money(i.saleRate)}</span><span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span></div>
      <button class="btn btn-primary btn-sm" data-add="${i.id}" ${so<=0?'disabled':''}>${ic('cart',15)}Add to cart</button>
    </div>`}).join(''):`<div class="empty" style="grid-column:1/-1">${ic('box',34)}<div class="big">No products found</div></div>`}</div>`;
@@ -1626,22 +1644,40 @@ function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
  draw()}
 function openShopItem(it){if(!it)return;const so=stockOf(it.id);let q=1;
  const t=tileFor(it.categoryId||it.name);
- const imgBig=it.photo?`<div class="pimg big" id="bigImg"><img src="${it.photo}" alt=""><span class="phZ" style="opacity:1">TAP TO ZOOM</span></div>`:`<div class="ptile" style="background:${t[0]};color:${t[1]};height:100px;font-size:36px;margin-bottom:14px">${esc(it.name[0]||'?')}</div>`;
+ const stage=it.photo
+  ?`<div class="zstage" id="zStage"><img id="zImg" src="${it.photo}" alt=""><div class="zpane" id="zPane"></div><span class="phZ" style="opacity:1">${ic('search',12)}HOVER TO ZOOM</span></div>`
+  :`<div class="ptile" style="background:${t[0]};color:${t[1]};height:220px;font-size:44px">${esc(it.name[0]||'?')}</div>`;
  openModal(`<div class="mhead"><h3>${esc(it.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody">
-  ${imgBig}
-  <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(catById(it.categoryId)?.name||'')}</div>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
-    <span class="pprice" style="font-size:20px">${money(it.saleRate)}</span>
-    <span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span>
+ <div class="mbody"><div class="pmgrid">
+  <div>${stage}</div>
+  <div>
+   <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(catById(it.categoryId)?.name||'')}</div>
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
+     <span class="pprice" style="font-size:20px">${money(it.saleRate)}</span>
+     <span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span>
+   </div>
+   ${so>0?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
+     <div class="stepper"><button type="button" id="qm">−</button><span id="qv">1</span><button type="button" id="qp">+</button></div>
+     <div style="text-align:right"><span class="lbl">Subtotal</span><div class="pprice" id="qsub" style="font-size:17px">${money(it.saleRate)}</div></div></div>
+   <button class="btn btn-primary" style="width:100%" id="qAdd">${ic('cart',16)}Add to cart</button>`
+   :`<button class="btn btn-ghost" style="width:100%" disabled>Out of stock</button>`}
   </div>
-  ${so>0?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
-    <div class="stepper"><button type="button" id="qm">−</button><span id="qv">1</span><button type="button" id="qp">+</button></div>
-    <div style="text-align:right"><span class="lbl">Subtotal</span><div class="pprice" id="qsub" style="font-size:17px">${money(it.saleRate)}</div></div></div>
-  <button class="btn btn-primary" style="width:100%" id="qAdd">${ic('cart',16)}Add to cart</button>`
-  :`<button class="btn btn-ghost" style="width:100%" disabled>Out of stock</button>`}
- </div>`);
- const bi=$('#bigImg');if(bi)bi.onclick=()=>{bi.classList.toggle('zoomed');const z=bi.querySelector('.phZ');if(z)z.textContent=bi.classList.contains('zoomed')?'TAP TO SHRINK':'TAP TO ZOOM'};
+ </div></div>`);
+ const mw=$('.modal');if(mw)mw.classList.add('wide');
+ const zg=$('#zStage'),zp=$('#zPane'),zi=$('#zImg');
+ if(zg&&zp&&zi){
+  zg.addEventListener('pointermove',e=>{
+   if(e.pointerType==='touch')return;
+   const r=zi.getBoundingClientRect();
+   const px=Math.max(0,Math.min(100,((e.clientX-r.left)/r.width)*100));
+   const py=Math.max(0,Math.min(100,((e.clientY-r.top)/r.height)*100));
+   zp.style.display='block';
+   zp.style.backgroundImage=`url("${it.photo}")`;
+   zp.style.backgroundSize='260% 260%';
+   zp.style.backgroundPosition=px+'% '+py+'%'});
+  zg.addEventListener('pointerleave',()=>{zp.style.display='none'});
+  zg.addEventListener('click',()=>{if(matchMedia('(hover:none)').matches)zg.classList.toggle('zoomed')});
+ }
  if(so>0){const upd=()=>{q=Math.max(1,Math.min(so,q));$('#qv').textContent=q;$('#qsub').textContent=money(q*it.saleRate)};
   $('#qp').onclick=()=>{q=Math.min(so,q+1);upd()};$('#qm').onclick=()=>{q=Math.max(1,q-1);upd()};
   $('#qAdd').onclick=()=>{cartAdd(it.id,q);closeModal()}}}
