@@ -1176,7 +1176,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
    attachCombo(nameIn,{
     getPool:()=>ITEMS().slice().sort((a,b)=>a.name.localeCompare(b.name))
      .map(x=>({id:x.id,label:x.name,rate:+(x[D.rateKey]||0),
-      sub:(catById(x.categoryId)?catById(x.categoryId).name:'-')+' | '+(brandById(x.brandId)?brandById(x.brandId).name:'-')+' | '+money(x[D.rateKey]||0)+' | '+stockOf(x.id)+' in stock'}),
+      sub:(catById(x.categoryId)?catById(x.categoryId).name:'-')+' | '+(brandById(x.brandId)?brandById(x.brandId).name:'-')+' | '+money(x[D.rateKey]||0)+' | '+stockOf(x.id)+' in stock'})),
     onPick:o=>{st.lines[i].itemId=o.id;st.lines[i].rate=o.rate;
      row.querySelector('.fl-rate').value=o.rate;recalc()}});
    row.querySelector('.fl-qty').oninput=e=>{st.lines[i].qty=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
