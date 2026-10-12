@@ -1510,7 +1510,8 @@ function mk([f,t]){return{from:f,to:t}}
 
 function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
  const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
-  const rows=stockRows().map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
+  const assignedIds=co?(Array.isArray(S.me.brandIds)?S.me.brandIds:(Array.isArray(S.me.assignedBrandIds)?S.me.assignedBrandIds:[])):null;
+  const rows=stockRows().filter(x=>{if(!co)return true;const b=itemBrand(x.it);return !!b&&assignedIds.includes(b.id)}).map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
   const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
   const val=x=>basis==='cost'?x.cv:x.sv;
   const barCol=basis==='cost'?'var(--green)':'var(--amber)';
@@ -1821,7 +1822,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
     <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role==='company'?'Company':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
-    ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
+    ${canTouch(t)?`<div style="display:flex;gap:6px;flex-wrap:wrap">${t.role==='company'?`<button class="btn btn-ghost btn-sm" data-brands="${t.id}">Allocate brands</button>`:''}<button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
    <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
   else if(tab==='customers'){body=`<button class="btn btn-primary" id="tcNew" style="margin-bottom:12px">${ic('plus',16)}Create customer login</button>
    <div class="card"><div class="list">${custs.length?custs.map(t=>{const p=partyById(t.partyId);const bal=p?partyBalance(p.id):0;const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -1860,6 +1861,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   qsa('[data-rej]').forEach(b=>b.onclick=()=>confirmBox('Reject request?','They will be asked to contact you directly.',()=>{dbUpdate('regRequests',b.dataset.rej,{status:'rejected'})}));
   qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
   qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
+  qsa('[data-brands]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.brands);if(t)openBrandAllocationModal(t)});
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
   qsa('[data-resetm]').forEach(b=>b.onclick=()=>{const u2=USERS().find(x=>x.mobile===b.dataset.resetm);if(u2)openResetPwModal(u2,RESETS().find(r=>r.mobile===u2.mobile&&r.status==='pending')?.id)});
   qsa('[data-tg]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.tg);
@@ -1870,6 +1872,22 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    if(t.role==='super'&&USERS().filter(x=>x.role==='super'&&x.active!==false).length<=1)return toast('Last super admin cannot be removed','err');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
+function openBrandAllocationModal(user){
+ if(!user||user.role!=='company')return;
+ const current=Array.isArray(user.brandIds)?user.brandIds:(Array.isArray(user.assignedBrandIds)?user.assignedBrandIds:[]);
+ const brands=BRANDS().slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+ openModal(`<div class="mhead"><h3>Allocate brands · ${esc(user.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+ <div class="mbody"><p class="muted" style="font-size:13px;margin-bottom:12px">Select which brands this company account can see on Stock Valuation. Only selected brands will be included in its valuation totals.</p>
+ <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" id="baAll">Select all</button><button type="button" class="btn btn-ghost btn-sm" id="baNone">Clear all</button></div>
+ <div id="baList" style="max-height:45vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px">${brands.length?brands.map(b=>`<label style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px dashed var(--line)"><input type="checkbox" class="ba-brand" value="${esc(b.id)}" ${current.includes(b.id)?'checked':''} style="width:18px;height:18px"><span>${esc(b.name||'Unnamed brand')}</span></label>`).join(''):`<div class="empty">No brands have been created yet.</div>`}</div>
+ <div class="savebar"><button type="button" class="btn btn-ghost" id="baCancel">Cancel</button><button type="button" class="btn btn-primary" id="baSave">Save allocation</button></div></div>`);
+ const checks=()=>qsa('.ba-brand');
+ const all=$('#baAll'),none=$('#baNone'),save=$('#baSave'),cancel=$('#baCancel');
+ if(all)all.onclick=()=>checks().forEach(c=>c.checked=true);
+ if(none)none.onclick=()=>checks().forEach(c=>c.checked=false);
+ if(cancel)cancel.onclick=closeModal;
+ if(save)save.onclick=async()=>{const ids=checks().filter(c=>c.checked).map(c=>c.value);save.disabled=true;save.textContent='Saving…';try{await DB.collection('users').doc(user.id).set({brandIds:ids,assignedBrandIds:ids,brandAllocationUpdatedAt:Date.now()},{merge:true});user.brandIds=ids;user.assignedBrandIds=ids;if(S.me&&S.me.id===user.id){S.me.brandIds=ids;S.me.assignedBrandIds=ids}closeModal();toast(`Brand allocation saved (${ids.length})`);route()}catch(e){console.error('brand allocation save failed',e);toast('Could not save brand allocation: '+(e.code||e.message),'err');save.disabled=false;save.textContent='Save allocation'}};
+}
 async function openInviteModal(){const me=S.me;
  const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
