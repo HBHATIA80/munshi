@@ -426,7 +426,7 @@ async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
  if(state.counters)state.counters[pre]=n;return pre+'-'+String(n).padStart(4,'0')}
 function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
 function session(){return S.me}
-function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
+function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];closeSheet();closeModal();auth.signOut().catch(()=>{});S.me=null;go('login')}
 const RANK={customer:0,staff:1,company:1,admin:2,super:3};
 const isMgr=()=>S.me&&RANK[S.me.role]>=2;
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2,profit:u=>u&&RANK[u.role]>=2};
@@ -783,7 +783,7 @@ function showJoinForm(inv){
   }catch(ex){b.disabled=false;b.textContent='Create account & sign in';
    return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Signup failed: '+ex.code)}};
 }
-function openSelfPwModal(){openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="pwForm">
   <div class="field"><label class="fl">Current password</label><input class="in" id="pw0" type="password" required></div>
   <div class="field"><label class="fl">New password</label><input class="in" id="pw1" type="password" required></div>
