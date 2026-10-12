@@ -1577,13 +1577,19 @@ function vReportStock() {
         const g = groups[id];
 
        
+const normalizedId = String(id).trim();
+
 const src = id === '__na'
   ? null
-  : (dim === 'brand'
-      ? BRANDS().find(z => z.id === id)
-      : CATS().find(z => z.id === id)
+  : (
+      dim === 'brand'
+        ? BRANDS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
+        : CATS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
     ) || null;
-
         const gcv = sum(g, x => x.cv);
         const gsv = sum(g, x => x.sv);
 
