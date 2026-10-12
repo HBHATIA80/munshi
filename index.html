@@ -1467,7 +1467,8 @@ function emptyHtml(icon,msg){return `<div class="empty">${ic(icon,34)}<div class
 function mk([f,t]){return{from:f,to:t}}
 
 function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
- const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
+  const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
+  if(tab==='brand'&&!BRANDS().length){DB.collection('brands').get().then(s=>{state.brands=s.docs.map(d=>Object.assign({id:d.id},d.data()));draw()});return}
   const rows=stockRows().map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
   const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
   const val=x=>basis==='cost'?x.cv:x.sv;
