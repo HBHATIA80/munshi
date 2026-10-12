@@ -447,6 +447,7 @@ function subscribeAll(me){
   S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
   return}
  COLLECTION_KEYS.forEach(c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))});
+ state.regReqs=[];S.unsubs.push(DB.collection('regRequests').where('status','==','pending').onSnapshot(snap=>{state.regReqs=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error('regRequests',err)}));
  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
 }
@@ -610,7 +611,7 @@ function renderLogin(){
      <button class="btn btn-primary" style="width:100%;margin-top:4px" id="authBtn">Sign in</button>
    </form>
    ${noSuper?`<div class="notice" style="margin-top:16px">${ic('alert',15)}<div>This business hasn't been claimed yet. Owner? <a href="#/setup" style="font-weight:700">Set up this business →</a> (setup key required)</div></div>`:''}
-   <div class="authlinks"><a href="#/join">Invited? Join with a code</a><a href="javascript:void(0)" id="forgotLink">Forgot password?</a></div>
+     <div class="authlinks"><a href="#/register">New? Register as customer</a><a href="#/join">Invited? Join with a code</a><a href="javascript:void(0)" id="forgotLink">Forgot password?</a></div>
  </div>`);
  $('#forgotLink').onclick=openForgotModal;
  $('#authForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#authErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
@@ -748,6 +749,39 @@ function showJoinForm(inv){
    await DB.collection('invites').doc(inv.id).set({used:true,usedBy:name,usedTs:Date.now()},{merge:true});
   }catch(ex){b.disabled=false;b.textContent='Create account & sign in';
    return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Signup failed: '+ex.code)}};
+}
+
+
+function renderRegister(){
+ authShell(`<div class="card cardpad">
+   <span class="lbl">New customer registration</span>
+   <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Request a wholesale account</h2>
+   <p class="muted" style="font-size:13.5px;margin-bottom:18px">Fill this and we'll verify and create your login — you'll receive your password on call / WhatsApp. You cannot sign in until we approve you.</p>
+   <form id="rgForm">
+     <div class="field"><label class="fl">Your / shop name</label><input class="in" id="rg-name" required placeholder="e.g. Raman Mobiles"></div>
+     <div class="field"><label class="fl">Mobile number</label><input class="in" id="rg-mob" required inputmode="numeric" placeholder="10-digit mobile"></div>
+     <div class="frow"><div class="field"><label class="fl">City (optional)</label><input class="in" id="rg-city"></div>
+     <div class="field"><label class="fl">Note (optional)</label><input class="in" id="rg-note" placeholder="what you buy"></div></div>
+     <div id="rgErr" class="notice red" style="display:none"></div>
+     <button class="btn btn-primary" style="width:100%">Send registration request</button>
+   </form>
+   <div class="authlinks"><a href="#/login">← Back to login</a></div></div>`);
+ $('#rgForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#rgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const name=$('#rg-name').value.trim(),mob=normMobile($('#rg-mob').value),city=$('#rg-city').value.trim(),note=$('#rg-note').value.trim();
+  if(name.length<2)return err('Enter your name');
+  if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
+  try{
+   const ex=await DB.collection('logins').doc(mob).get();
+   if(ex.exists)return err('This mobile already has an account — go back and sign in.');
+   const dup=await DB.collection('regRequests').doc(mob).get();
+   if(dup.exists&&dup.data().status==='pending')return err('A request from this mobile is already pending with us.');
+   await DB.collection('regRequests').doc(mob).set({name,mobile:mob,city,note,status:'pending',created:Date.now()});
+   authShell(`<div class="card cardpad" style="text-align:center">
+    <div class="mark" style="margin:0 auto 12px">✓</div>
+    <h2 style="font:700 22px var(--disp);margin:8px 0 6px">Request sent</h2>
+    <p class="muted" style="font-size:13.5px;margin-bottom:16px">We've received your registration for <b>${esc(name)}</b>. Once approved, you'll get your login (mobile ${esc(mob)} + password) on call / WhatsApp.</p>
+    <a class="btn btn-primary" style="width:100%" href="#/login">Back to login</a></div>`);
+  }catch(ex){err('Could not send the request ('+ex.code+'). Try again.')}};
 }
 function openSelfPwModal(){openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="pwForm">
@@ -1740,6 +1774,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
  const draw=()=>{const tab=S.usersTab;
   const team=USERS().filter(x=>x.role!=='customer'),custs=USERS().filter(x=>x.role==='customer');
   const pend=RESETS().filter(r=>r.status==='pending'),done=RESETS().filter(r=>r.status==='done').slice(-6).reverse();
+  const regs=(state.regReqs||[]).filter(r=>r.status==='pending');
   const invs=INVITES().slice().sort((a,b)=>(b.createdTs||0)-(a.createdTs||0));
   const openInv=invs.filter(v=>inviteState(v)[0]==='open').length;
   const canTouch=t=>me.role==='super'||(me.role==='admin'&&t.role!=='super');
@@ -1765,7 +1800,12 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div class="lsub"><span>${st[1]}</span>${st[0]==='open'&&v.days?`<span>· expires in ${Math.max(1,Math.ceil((v.createdTs+v.days*864e5-Date.now())/864e5))}d</span>`:''}${v.used?`<span>· used by ${esc(v.usedBy||'—')}</span>`:''}</div></div>
     ${st[0]==='open'?`<button class="btn btn-ghost btn-sm" data-cp="${v.id}">${ic('edit',14)}Copy</button><button class="icon-btn" data-rv="${v.id}" style="color:var(--red)" title="Revoke">${ic('trash',15)}</button>`:st[0]==='expired'?`<button class="icon-btn" data-rv="${v.id}" style="color:var(--red)">${ic('trash',15)}</button>`:''}</div>`}).join(''):`<div class="empty">${ic('tag',34)}<div class="big">No invite codes</div>Generate one and share it privately with your staff member.</div>`}</div></div>
    <div class="notice" style="margin-top:14px">${ic('alert',15)}<div>Invite codes are the <b>only</b> way someone can create a staff/admin account. Share them by private WhatsApp only, and revoke any code that isn't used.</div></div>`}
-  else{body=(pend.length?`<div class="lbl" style="margin:4px 0 8px">Pending requests</div><div class="card" style="margin-bottom:14px"><div class="list">${pend.map(r=>`
+  else if(tab==='regs'){body=regs.length?`<div class="card"><div class="list">${regs.map(r=>`
+    <div class="lrow editmode"><div class="lmain"><div class="lname">${esc(r.name)}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span>${r.city?'<span>·</span><span>'+esc(r.city)+'</span>':''}${r.note?'<span>·</span><span>'+esc(r.note)+'</span>':''}</div></div><span class="lmeta">${timeAgo(r.created)}</span>
+    <button class="btn btn-primary btn-sm" data-appr="${r.id}" data-mob="${r.mobile}" data-nm="${esc(r.name)}" data-city="${esc(r.city||'')}">Approve</button><button class="icon-btn" data-rej="${r.id}" style="color:var(--red)" title="Reject">${ic('x',15)}</button></div>`).join('')}</div></div>`
+   :`<div class="notice green" style="margin-bottom:14px">${ic('check',15)}<div>No pending sign-up requests.</div></div>`}  
+
+else{body=(pend.length?`<div class="lbl" style="margin:4px 0 8px">Pending requests</div><div class="card" style="margin-bottom:14px"><div class="list">${pend.map(r=>`
     <div class="lrow editmode"><div class="lmain"><div class="lname">${esc(USERS().find(x=>x.mobile===r.mobile)?.name||'Account '+r.mobile)}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="lmeta">${timeAgo(r.created)}</span>
     <button class="btn btn-primary btn-sm" data-resetm="${r.mobile}">Set new password</button></div>`).join('')}</div></div>`:`<div class="notice green" style="margin-bottom:14px">${ic('check',15)}<div>No pending password-reset requests.</div></div>`)
    +(done.length?`<div class="lbl" style="margin:4px 0 8px">Recently reset</div><div class="card"><div class="list">${done.map(r=>`<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(USERS().find(x=>x.mobile===r.mobile)?.name||r.mobile)}</div><div class="lsub"><span class="mono">${esc(r.mobile)}</span></div></div><span class="badge b-green">Done</span><span class="lmeta">${timeAgo(r.doneTs||r.created)}</span></div>`).join('')}</div></div>`:'')}
@@ -1780,6 +1820,8 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   const tn=$('#tuNew');if(tn)tn.onclick=()=>openTeamModal();
   const cn=$('#tcNew');if(cn)cn.onclick=()=>openCustomerModal();
   const tin=$('#tiNew');if(tin)tin.onclick=()=>openInviteModal();
+  qsa('[data-appr]').forEach(b=>b.onclick=()=>openApproveModal(b.dataset.appr,b.dataset.mob,b.dataset.nm,b.dataset.city||''));
+  qsa('[data-rej]').forEach(b=>b.onclick=()=>confirmBox('Reject request?','They will be asked to contact you directly.',()=>{dbUpdate('regRequests',b.dataset.rej,{status:'rejected'})}));
   qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
   qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
@@ -1871,6 +1913,30 @@ async function openCustomerModal(){
    await batch.commit();
    closeModal();toast('Customer login created — ID: '+mob);route()}
   catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
+function openApproveModal(reqId,mobile,name,city){
+ openModal(`<div class="mhead"><h3>Approve — ${esc(name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+ <div class="mbody"><form id="apForm">
+  <div class="notice green" style="margin:0 0 14px">${ic('check',15)}<div>Creates the ledger party + login <b class="mono">${esc(mobile)}</b>. Share the password with them on WhatsApp after approving.</div></div>
+  <div class="frow"><div class="field"><label class="fl">Party name</label><input class="in" id="ap-name" required value="${esc(name)}"></div>
+  <div class="field"><label class="fl">Password (you set it)</label><input class="in" id="ap-pass" type="password" required></div></div>
+  <div class="frow"><div class="field"><label class="fl">Phone</label><input class="in" id="ap-phone" value="${esc(mobile)}"></div>
+  <div class="field"><label class="fl">City / Address</label><input class="in" id="ap-city" value="${esc(city)}"></div></div>
+  <div id="apErr" class="notice red" style="display:none"></div>
+  <button class="btn btn-primary" style="width:100%">Approve & create login</button></form></div>`);
+ $('#apForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#apErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
+  const nm=$('#ap-name').value.trim(),pw=$('#ap-pass').value,ph=$('#ap-phone').value.trim(),city=$('#ap-city').value.trim();
+  if(pw.length<4)return err('Password too short');
+  try{
+   const pid=dbAdd('parties',{name:nm,type:'customer',phone:ph,address:city,openingBalance:0,openingType:'dr'}).id;
+   const newUid=await createAuthUser(mobileToEmail(mobile),pw);
+   const batch=DB.batch();
+   batch.set(DB.collection('users').doc(newUid),{name:nm,mobile,role:'customer',partyId:pid,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mobile),{email:mobileToEmail(mobile)});
+   batch.update(DB.collection('regRequests').doc(reqId),{status:'approved',approvedTs:Date.now()});
+   await batch.commit();
+   closeModal();toast('Customer approved — login created: '+mobile);route()}
+  catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile already has an account.':'Failed: '+ex.code)}}}
+
 function openResetPwModal(t,reqId){if(!t)return;
  openModal(`<div class="mhead"><h3>Reset password — ${esc(t.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="rpForm">
@@ -1997,6 +2063,7 @@ function route(){
  if(p[0]==='login'){if(u){go(u.role==='customer'?'shop':'dash');return}renderLogin();return}
  if(p[0]==='setup'){if(u){go(u.role==='customer'?'shop':'dash');return}renderSetup();return}
  if(p[0]==='join'){if(u){go(u.role==='customer'?'shop':'dash');return}renderJoin();return}
+ if(p[0]==='register'){if(u){go(u.role==='customer'?'shop':'dash');return}renderRegister();return}
  if(!u){go('login');return}
  if(!document.querySelector('.side'))renderShell();
  updateBadges();
