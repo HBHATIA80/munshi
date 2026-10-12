@@ -1,0 +1,24 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      ".firebaserc.example",
+      "package.json",
+      "README.md",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/**"
+    ]
+  }
+}
