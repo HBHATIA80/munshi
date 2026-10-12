@@ -9,10 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Spline+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <style>
 :root{
   --paper:#F5F3EC; --card:#FFFFFF; --ink:#182420; --ink2:#646F68; --ink3:#9AA39C;
@@ -410,7 +408,7 @@ function itemThumb(it,size=38){if(it&&it.photo)return `<img class="imthumb" src=
  return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:9px">${esc((it&&it.name?it.name:'?')[0]||'?')}</span>`}
 
 let auth=null,DB=null;
-const state={companyInventory:null,users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],regReqs:[],settings:null,counters:null,myParty:null};
+const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],regReqs:[],settings:null,counters:null,myParty:null};
 const COLLECTION_KEYS=['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites'];
 const LS={get(k,d){try{const v=localStorage.getItem('munshi_'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){localStorage.setItem('munshi_'+k,JSON.stringify(v))},del(k){localStorage.removeItem('munshi_'+k)}};
 const USERS=()=>state.users||[],PARTIES=()=>state.parties||[],CATS=()=>state.categories||[],BRANDS=()=>state.brands||[],ITEMS=()=>state.items||[];
@@ -428,24 +426,16 @@ async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
  if(state.counters)state.counters[pre]=n;return pre+'-'+String(n).padStart(4,'0')}
 function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
 function session(){return S.me}
-function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];auth.signOut().catch(()=>{});S.me=null;go('login')}
+function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];closeSheet();closeModal();auth.signOut().catch(()=>{});S.me=null;go('login')}
 const RANK={customer:0,staff:1,company:1,admin:2,super:3};
 const isMgr=()=>S.me&&RANK[S.me.role]>=2;
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2,profit:u=>u&&RANK[u.role]>=2};
-async function loadCompanyInventory(){
- if(!S.me||S.me.role!=='company')return;
- const fn=firebase.app().functions('us-central1').httpsCallable('getCompanyInventory');
- const result=await fn({});
- state.companyInventory=result.data||{items:[],brands:[],categories:[],generatedAt:Date.now()};
- state.items=state.companyInventory.items||[];
- state.brands=state.companyInventory.brands||[];
- state.categories=state.companyInventory.categories||[];
- onLive();
-}
 function subscribeAll(me){
  if(me.role==='company'){
-  loadCompanyInventory().catch(err=>{console.error('Company inventory load failed',err);toast('Could not load assigned-brand inventory','err')});
-  S.unsubs.push(DB.collection('users').doc(me.id).onSnapshot(s=>{if(!s.exists)return;const fresh=s.data();if(fresh.role!=='company'||fresh.active===false){logout();return}S.me=Object.assign({},S.me,fresh);loadCompanyInventory().catch(err=>console.error('Company inventory refresh failed',err))},err=>console.error('Company profile listener',err)));
+  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
+  ['items','categories','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(sub);
+  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
   return}
  if(me.role==='customer'){
   const sub=(c,q)=>{let ref=DB.collection(c);if(q)ref=ref.where(q.f,'==',q.v);
@@ -510,7 +500,7 @@ async function adminResetPw(user,newPw){
  await batch.commit();
  return newUid}
 
-function stockOf(itemId){if(S.me?.role==='company')return +(itemById(itemId)?.qty)||0;let q=+(itemById(itemId)?.openingStock)||0;
+function stockOf(itemId){let q=+(itemById(itemId)?.openingStock)||0;
  PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q+=(+l.qty||0)}));
  SALES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)}));
  PRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)})});
@@ -580,7 +570,7 @@ const NAVG=[
  {g:'Money',items:[['ledger','Ledger','book'],['collections','Collections','down'],['payments','Payments','up']]},
  {g:'Insights',items:[['r/stock','Stock Valuation','box'],['r/sales','Sales Analysis','chart'],['r/purchase','Purchase Analysis','chart'],['r/profit','Profit Analysis','in',2],['r/collection','Collection Analysis','down'],['r/payment','Payment Analysis','up']]},
  {g:'Admin',items:[['users','Users & Customers','user',2],['settings','Settings','gear',2]]}];
-const navItems=u=>u.role==='company'?[{g:'Inventory',items:[['dash','Home','home'],['items','Item List','box'],['r/stock','Stock Valuation','box']]}]:NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
+const navItems=u=>u.role==='company'?[{g:'',items:[['dash','Home','home'],['r/stock','Stock Valuation','box']]}]:NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
 
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.innerHTML=ic(type==='err'?'alert':'check',16)+esc(msg);$('#toastRoot').appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),320)},2600)}
@@ -793,7 +783,7 @@ function showJoinForm(inv){
   }catch(ex){b.disabled=false;b.textContent='Create account & sign in';
    return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Signup failed: '+ex.code)}};
 }
-function openSelfPwModal(){openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openModal(`<div class="mhead"><h3>Change password</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="pwForm">
   <div class="field"><label class="fl">Current password</label><input class="in" id="pw0" type="password" required></div>
   <div class="field"><label class="fl">New password</label><input class="in" id="pw1" type="password" required></div>
@@ -920,19 +910,41 @@ function bindDashCheck(){
  if(ti)ti.onchange=()=>{S.dashCheck.to=ti.value||todayISO();S.dashCheck.preset='custom';qsa('[data-dc]').forEach(x=>x.classList.remove('on'));syncHead();drawCheckBody()};
  drawCheckBody()}
 function vDashCompany(){
- setTop('Company Inventory');setActiveNav('dash');
- const draw=()=>{const data=state.companyInventory;
-  if(!data){V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Company Inventory</div><div class="psub">Loading your assigned-brand stock…</div></div></div>`;return}
-  const items=data.items||[],qty=items.reduce((a,x)=>a+(+x.qty||0),0),value=items.reduce((a,x)=>a+(+x.stockValue||0),0);
-  V().innerHTML=`<div class="pagehead"><div><span class="lbl">Assigned-brand access</span><div class="ptitle">Welcome, ${esc((S.me.name||'').split(' ')[0])}</div><div class="psub">Only your assigned brands are included.</div></div><button class="btn btn-ghost" id="coDashRefresh">Refresh</button></div>
-  <div class="sumrow">${sumTile('Stock valuation',money(value))}${sumTile('Units in stock',String(qty))}${sumTile('Items',String(items.length))}</div>
-  <div class="card cardpad"><div class="pagehead"><div><div class="ptitle" style="font-size:17px">Inventory access</div><div class="psub">Cost valuation only; no sales, purchase, profit or margin figures.</div></div></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary" href="#/items">View item list</a><a class="btn btn-ghost" href="#/r/stock">Open stock valuation</a></div></div>`;
-  $('#coDashRefresh').onclick=async()=>{try{await loadCompanyInventory();toast('Inventory refreshed')}catch(e){toast('Refresh failed','err')}};
- };
- draw();
+ setTop('Dashboard');setActiveNav('dash');
+ const t=todayISO(),u=S.me,s=SET();
+ if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
+ const ms=monthStart(t);
+ const dS=SALES().filter(d=>d.date===t),dP=PURCHASES().filter(d=>d.date===t);
+ const colT=sum(RECEIPTS().filter(r=>r.date===t),r=>r.amount)+sum(dS,d=>+d.paid);
+ const mS=SALES().filter(d=>d.date>=ms),mP=PURCHASES().filter(d=>d.date>=ms);
+ const mCol=sum(RECEIPTS().filter(r=>r.date>=ms),r=>r.amount)+sum(mS,d=>+d.paid);
+ const hr=new Date().getHours(),greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+ const sr=stockRows();const stC=sum(sr,x=>x.value);
+ const topStk=sr.filter(x=>x.qty>0).slice(0,6);
+ V().innerHTML=`
+ <div class="pagehead" style="margin-bottom:12px"><div><span class="lbl">${esc(s.businessName)} · company view</span><div class="ptitle">${greet}, ${esc(u.name.split(' ')[0])}</div><div class="psub">${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div></div>
+ <div class="kpis">
+   <div class="kpi tint-g"><span class="lbl">Sales · today</span><div class="kpiV" data-v="${sum(dS,d=>d.total)}">0</div><div class="kpiD">${dS.length} invoices</div></div>
+   <div class="kpi"><span class="lbl">Collection · today</span><div class="kpiV" style="color:var(--green)" data-v="${colT}">0</div><div class="kpiD">cash received</div></div>
+   <div class="kpi tint-r"><span class="lbl">Purchases · today</span><div class="kpiV" data-v="${sum(dP,d=>d.total)}">0</div><div class="kpiD">${dP.length} invoices</div></div>
+   <div class="kpi"><span class="lbl">Stock @ cost</span><div class="kpiV" style="color:var(--amber)" data-v="${stC}">0</div><div class="kpiD">${ITEMS().length} items</div></div>
+ </div>
+ <div class="kpis">
+   <div class="kpi tint-g"><span class="lbl">Sales · this month</span><div class="kpiV" data-v="${sum(mS,d=>d.total)}">0</div><div class="kpiD">${mS.length} invoices MTD</div></div>
+   <div class="kpi"><span class="lbl">Collection · this month</span><div class="kpiV" style="color:var(--green)" data-v="${mCol}">0</div><div class="kpiD">receipts + with invoices</div></div>
+   <div class="kpi tint-r"><span class="lbl">Purchases · this month</span><div class="kpiV" data-v="${sum(mP,d=>d.total)}">0</div><div class="kpiD">${mP.length} invoices MTD</div></div>
+ </div>
+ <div class="card" style="margin-bottom:14px">
+   <div class="cardhead"><span class="lbl">Cash pulse · last 14 days</span><div class="legend"><span><i class="dot" style="background:var(--green)"></i>Sales</span><span><i class="dot" style="background:var(--red)"></i>Purchases</span></div></div>
+   <div class="cardpad chartwrap" id="pulse">${pulseChart()}</div>
+ </div>
+ ${dashCheckCard()}
+ <div class="card"><div class="cardhead"><span class="lbl">Stock valuation @ cost</span><a class="btn btn-ghost btn-sm" href="#/r/stock">Full detail</a></div><div class="cardpad">
+   ${topStk.length?topStk.map(x=>`<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${x.qty} pcs @ ${money(x.ac)}</span></div><div class="btrack"><i style="width:${Math.max(2,stC?x.value/stC*100:0)}%;background:var(--amber)"></i></div><div class="bv">${money(x.value)}</div></div>`).join('')+`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">Total stock @ cost</span><b style="font-size:17px">${money(stC)}</b></div>`:`<div class="muted" style="text-align:center;padding:18px 0">No stock yet.</div>`}
+ </div></div>`;
+ qsa('.kpiV[data-v]').forEach(el=>countUp(el,+el.dataset.v));
+ bindPulse();bindDashCheck();
 }
-
 function vDash(){
  setTop('Dashboard');setActiveNav('dash');
  const t=todayISO(),y=addDays(t,-1),u=S.me,s=SET();
@@ -1300,9 +1312,8 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Items</div><div class="psub">${its.length} in catalogue${editOK?'':' · read-only for staff'}</div></div>${editOK?`<button class="btn btn-primary" id="iNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="iq" placeholder="Search items…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${its.length?its.map(i=>{const so=stockOf(i.id),low=+(i.low||10);
-   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span>${S.me.role==='company'?'':`<span>·</span><span>sell ${money(i.saleRate)}</span>`}${S.me.role==='company'?`<span>·</span><span>stock value ${money(i.stockValue||0)}</span>`:''}<span>·</span><span>${esc(catById(i.subcategoryId)?.name||'')}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
+   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
    ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-stk="${i.id}" title="Adjust stock">${ic('layers',15)}</button><button class="icon-btn" data-edit="${i.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${i.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">${ic('box',34)}<div class="big">No items yet</div>Create your first accessory.</div>`}</div></div>`;
-  if(S.me.role==='company')qsa('.lrow').forEach((r,idx)=>{const it=its[idx];r.style.cursor='pointer';r.onclick=()=>openCompanyItemDetail(it)});
   if(editOK){$('#iNew').onclick=()=>openItemModal();
    qsa('[data-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();openItemModal(itemById(b.dataset.edit))});
    qsa('[data-stk]').forEach(b=>b.onclick=e=>{e.stopPropagation();openStockModal(itemById(b.dataset.stk))});
@@ -1312,13 +1323,6 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
     confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted')})})}
   $('#iq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
  draw()}
-function openCompanyItemDetail(it){if(!it)return;
- const cat=catById(it.categoryId),sub=catById(it.subcategoryId),brand=brandById(it.brandId);
- openModal(`<div class="mhead"><h3>${esc(it.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div><div class="mbody">
- <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:16px">${itemThumb(it,76)}<div><div class="lname">${esc(it.name)}</div><div class="muted">${esc(it.sku||'')}</div></div></div>
- <div class="sumrow">${sumTile('Stock quantity',String(it.qty||0))}${sumTile('Stock valuation',money(it.stockValue||0))}</div>
- <div class="trow"><span class="muted">Brand</span><b>${esc(brand?.name||'—')}</b></div><div class="trow"><span class="muted">Category</span><b>${esc(cat?.name||'—')}</b></div><div class="trow"><span class="muted">Sub-category</span><b>${esc(sub?.name||'—')}</b></div>
- <p class="muted" style="font-size:12px;margin-top:12px">Only assigned-brand inventory details are available to this account.</p></div>`)}
 function openItemModal(it){let photoVal=it?(it.photo||''):'';
  openModal(`<div class="mhead"><h3>${it?'Edit item':'New item'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="imForm">
@@ -1335,9 +1339,8 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
         <div class="muted" style="font-size:11.5px;margin-top:6px">Auto-compressed & saved with the item. Square photos look best.</div>
       </div>
     </div></div>
-  <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().filter(c=>!c.parentId).map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
+  <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
   <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div></div>
-  <div class="field"><label class="fl">Sub-category (optional)</label><select class="sel" id="im-subcat"><option value="">— none —</option>${CATS().filter(c=>c.parentId&&(!it?.categoryId||c.parentId===it.categoryId)).map(c=>`<option value="${c.id}" ${sel(c.id,it?.subcategoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
   <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?+it.purchaseRate||'':''}"></div>
   <div class="field"><label class="fl">Sale rate</label><input class="in" type="number" step="any" id="im-sr" value="${it?+it.saleRate||'':''}"></div></div>
   <div class="frow"><div class="field"><label class="fl">Opening stock</label><input class="in" type="number" step="any" id="im-os" value="${it?+it.openingStock||'':''}" placeholder="0"></div>
@@ -1345,7 +1348,6 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
   <div class="frow"><div class="field"><label class="fl">Low-stock alert at</label><input class="in" type="number" step="any" id="im-low" value="${it?+it.low||10:10}"></div>
   <div class="field"><label class="fl">SKU</label><input class="in" id="im-sku" value="${esc(it?.sku||'')}"></div></div>
   <button class="btn btn-primary" style="width:100%">${it?'Save changes':'Create item'}</button></form></div>`);
- $('#im-cat').onchange=()=>{const selSub=$('#im-subcat');selSub.innerHTML='<option value="">— none —</option>'+CATS().filter(c=>c.parentId===$('#im-cat').value).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')};
  $('#ph-sel').onclick=()=>$('#ph-file').click();
  $('#ph-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
   const btn=$('#ph-sel');btn.disabled=true;const old=btn.innerHTML;btn.textContent='Processing…';
@@ -1357,7 +1359,7 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
   catch(ex){toast('Could not read that image','err')}
   btn.disabled=false;btn.innerHTML=old;e.target.value=''};
  if($('#ph-rm'))$('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
- $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,subcategoryId:$('#im-subcat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
+ $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
   if(!o.name)return toast('Name is required','err');
   if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}closeModal();route()}}
 function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
@@ -1384,16 +1386,16 @@ function masterPage(key,title,collect,extra){setTop(title);setActiveNav(key);
   if(editOK){$('#mNew').onclick=()=>openCBModal(key,null,draw);
    qsa('[data-edit]').forEach(b=>b.onclick=()=>openCBModal(key,collect().find(x=>x.id===b.dataset.edit),draw));
    qsa('[data-del]').forEach(b=>b.onclick=()=>{const id=b.dataset.del;
-    if(key==='categories'&&ITEMS().some(i=>i.categoryId===id||i.subcategoryId===id||i.categoryId&&catById(i.categoryId)?.parentId===id))return toast('Category or sub-category is used by items/children','err');
+    if(key==='categories'&&ITEMS().some(i=>i.categoryId===id))return toast('Category has items','err');
     if(key==='brands'&&ITEMS().some(i=>i.brandId===id))return toast('Brand has items','err');
     confirmBox('Delete?','This cannot be undone.',()=>{dbDel(key,id);toast('Deleted')})})}};
  draw()}
 function openCBModal(key,obj,after){const label=key==='categories'?'Category':'Brand';
  openModal(`<div class="mhead"><h3>${obj?'Edit '+label:'New '+label}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><form id="cbForm"><div class="field"><label class="fl">Name</label><input class="in" id="cb-name" required value="${esc(obj?.name||'')}"></div>${key==='categories'?`<div class="field"><label class="fl">Parent category (optional)</label><select class="sel" id="cb-parent"><option value="">Top-level category</option>${CATS().filter(c=>!c.parentId&&c.id!==obj?.id).map(c=>`<option value="${c.id}" ${sel(c.id,obj?.parentId)}>${esc(c.name)}</option>`).join('')}</select></div>`:''}
+ <div class="mbody"><form id="cbForm"><div class="field"><label class="fl">Name</label><input class="in" id="cb-name" required value="${esc(obj?.name||'')}"></div>
  <button class="btn btn-primary" style="width:100%">Save</button></form></div>`);
  $('#cbForm').onsubmit=e=>{e.preventDefault();const name=$('#cb-name').value.trim();if(!name)return toast('Name required','err');
-  const extra=key==='categories'?{parentId:($('#cb-parent')?.value||'')}:{};if(obj){dbUpdate(key,obj.id,Object.assign({name},extra))}else{dbAdd(key,Object.assign({name},extra))}toast(label+' saved');closeModal();after()}}
+  if(obj){dbUpdate(key,obj.id,{name})}else{dbAdd(key,{name})}toast(label+' saved');closeModal();after()}}
 const vCats=()=>masterPage('categories','Categories',CATS,r=>ITEMS().filter(i=>i.categoryId===r.id).length+' items');
 const vBrands=()=>masterPage('brands','Brands',BRANDS,r=>ITEMS().filter(i=>i.brandId===r.id).length+' items');
 
@@ -1464,61 +1466,275 @@ function sumTile(l,v,c){return `<div class="sum"><span class="lbl">${l}</span><b
 function emptyHtml(icon,msg){return `<div class="empty">${ic(icon,34)}<div class="big">${msg}</div></div>`}
 function mk([f,t]){return{from:f,to:t}}
 
-function vCompanyStockReport(){setTop('Stock Valuation');setActiveNav('r/stock');
- const draw=()=>{const data=state.companyInventory;if(!data){V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Loading assigned-brand stock…</div></div></div>`;return}
- const rows=(data.items||[]).slice().sort((a,b)=>(+b.stockValue||0)-(+a.stockValue||0));
- const total=rows.reduce((s,x)=>s+(+x.stockValue||0),0),qty=rows.reduce((s,x)=>s+(+x.qty||0),0),mx=Math.max(1,...rows.map(x=>+x.stockValue||0));
- V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Assigned brands only · valued at weighted-average cost</div></div><button class="btn btn-ghost" id="coRefresh">Refresh</button></div>
- <div class="sumrow">${sumTile('Stock valuation',money(total))}${sumTile('Units in stock',String(qty))}${sumTile('Items',String(rows.length))}</div>
- <div class="card cardpad">${rows.length?rows.map(x=>`<div class="brow"><div><span class="bname">${esc(x.name)}</span><span class="bsub">${esc(brandById(x.brandId)?.name||'—')} · ${esc(catById(x.categoryId)?.name||'—')}${catById(x.subcategoryId)?' · '+esc(catById(x.subcategoryId).name):''} · ${x.qty} pcs · ${money(x.avgCost)} / unit</span></div><div class="btrack"><i style="width:${Math.max(2,(+x.stockValue||0)/mx*100)}%;background:var(--green)"></i></div><div class="bv">${money(x.stockValue||0)}</div></div>`).join(''):'<div class="empty"><div class="big">No stock for assigned brands</div></div>'}</div>
- <p class="muted" style="font-size:12px;margin-top:10px">Valuation is based on cost, not selling price. Profit, margin and sales figures are not available to company accounts.</p>`;
- $('#coRefresh').onclick=async()=>{const b=$('#coRefresh');b.disabled=true;b.textContent='Refreshing…';try{await loadCompanyInventory();toast('Inventory refreshed')}catch(e){toast('Refresh failed','err')}finally{if($('#coRefresh')){b.disabled=false;b.textContent='Refresh'}}};
- };
- draw();}
+function vReportStock() {
+  setTop('Stock Valuation');
+  setActiveNav('r/stock');
 
-function vReportStock(){if(S.me.role==='company')return vCompanyStockReport();setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
- const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
-  const rows=stockRows().map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
-  const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
-  const val=x=>basis==='cost'?x.cv:x.sv;
-  const barCol=basis==='cost'?'var(--green)':'var(--amber)';
-  let body='';
-  if(tab==='item'){
-   const arr=rows.slice().sort((a,b)=>val(b)-val(a));const mx=Math.max(1,...arr.map(val));
-   body=arr.length?arr.map(x=>{const v=val(x);
-    const meta=`${esc(catById(x.it.categoryId)?.name||'—')} · ${esc(brandById(x.it.brandId)?.name||'—')}`;
-    const sub=co
-     ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)}`
-     :(basis==='cost'
-      ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
-      :`${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · <b style="color:${x.profit>=0?'var(--green)':'var(--red)'}">${x.profit>=0?'profit':'loss'} ${money(Math.abs(x.profit))}</b>`);
-    return `<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${sub}</span></div><div class="btrack"><i style="width:${Math.max(2,v/mx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join('')
-    +`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">${basis==='cost'?'Total stock @ cost':'Total stock @ sale price'}</span><b style="font-size:17px">${money(basis==='cost'?totC:totS)}</b></div>`
-    :emptyHtml('box','No items yet')}
-  else{
-   const dim=tab==='brand'?'brandId':'categoryId';
-   const groups=groupBy(rows,x=>(x.it&&x.it[dim])||'__na');
-   const arr=Object.keys(groups).map(id=>{const g=groups[id];const src=id==='__na'?null:(dim==='brand'?brandById(id):catById(id));
-    return{name:src?src.name:'Unassigned',qty:sum(g,x=>x.qty),cv:sum(g,x=>x.cv),sv:sum(g,x=>x.sv),profit:sum(g,x=>x.profit)}}).sort((a,b)=>val(b)-val(a));
-   const tot=sum(arr,a=>val(a))||1;
-   if(tab==='category'&&arr.length){const cols=['#0C6B4A','#B23B2A','#A9720E','#16382A','#5B8A74','#C98A6B','#3E5C4B','#8FA795'];let acc=0;const stops=arr.map((a,i)=>{const s0=acc/tot*100;acc+=val(a);const s1=acc/tot*100;return `${cols[i%cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`}).join(',');
-    body+=`<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none"><div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column"><span class="lbl">${basis==='cost'?'@ cost':'@ sale'}</span><b class="mono" style="font-size:14px">${compact(tot)}</b></div></div>
-    <div style="flex:1;min-width:200px">${arr.map((a,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${cols[i%cols.length]}"></i>${esc(a.name)}</span><span class="mono muted">${(val(a)/tot*100).toFixed(1)}% · ${money(val(a))}</span></div>`).join('')}</div></div>`}
-   const gmx=Math.max(1,...arr.map(val));
-   body+=arr.length?arr.map(a=>{const v=val(a);
-    return `<div class="brow"><div><span class="bname">${esc(a.name)}</span><span class="bsub">${a.qty} pcs · cost ${money(a.cv)}${co?'':` · sale ${money(a.sv)} · potential ${a.profit>=0?'+':'-'}${money(Math.abs(a.profit))}`}</span></div><div class="btrack"><i style="width:${Math.max(2,v/gmx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join(''):emptyHtml('layers','Nothing to value yet')}
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div></div></div>
-  ${co?'':`<div class="tabs" style="margin-bottom:8px">
-   <button class="chip ${basis==='cost'?'on':''}" data-bs="cost">At Cost</button>
-   <button class="chip ${basis==='sale'?'on':''}" data-bs="sale">At Sale Price</button>
-  </div>`}
-  <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${co?sumTile('Units in stock',sum(rows,x=>x.qty)):sumTile('Stock @ sale price',money(totS),'var(--amber)')}${co?'':sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${co?'':sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
-  ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise']])}
-  <div class="card cardpad">${body}</div>
-  ${co?'':'<p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today\'s selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses. Items without a brand/category set appear under <b>Unassigned</b>.</p>'}`;
-  qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
-  bindTabs(key)};
- draw()}
+  S.report.stock = S.report.stock || {
+    tab: 'item',
+    basis: 'cost'
+  };
+
+  const key = 'stock';
+
+  const draw = () => {
+    const st = S.report[key];
+    const tab = st.tab;
+    const co = S.me.role === 'company';
+    const basis = co ? 'cost' : (st.basis || 'cost');
+
+    // Ensure brands are loaded before drawing brand-wise valuation.
+    if (tab === 'brand' && !BRANDS().length) {
+      DB.collection('brands').get().then(s => {
+        state.brands = s.docs.map(d =>
+          Object.assign({ id: d.id }, d.data())
+        );
+        draw();
+      }).catch(err => {
+        console.error('Failed to load brands:', err);
+      });
+      return;
+    }
+
+    const rows = stockRows().map(x => {
+      const sv = x.qty * (+x.it.saleRate || 0);
+      const cv = x.value;
+
+      return {
+        it: x.it,
+        qty: x.qty,
+        ac: x.ac,
+        cv,
+        sv,
+        profit: sv - cv
+      };
+    });
+
+    const totC = sum(rows, x => x.cv);
+    const totS = sum(rows, x => x.sv);
+    const totP = totS - totC;
+    const mg = totS > 0.004 ? (totP / totS) * 100 : 0;
+
+    const val = x => basis === 'cost' ? x.cv : x.sv;
+    const barCol = basis === 'cost'
+      ? 'var(--green)'
+      : 'var(--amber)';
+
+    let body = '';
+
+    if (tab === 'item') {
+      const arr = rows.slice().sort((a, b) => val(b) - val(a));
+      const mx = Math.max(1, ...arr.map(val));
+
+      body = arr.length
+        ? arr.map(x => {
+            const v = val(x);
+
+            const category = catById(x.it.categoryId);
+            const brand = brandById(x.it.brandId);
+
+            const meta =
+              `${esc(category?.name || '—')} · ` +
+              `${esc(brand?.name || '—')}`;
+
+            const sub = co
+              ? `${meta} · ${x.qty} pcs @ cost ${money(x.ac)}`
+              : basis === 'cost'
+                ? `${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
+                : `${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · ` +
+                  `<b style="color:${x.profit >= 0 ? 'var(--green)' : 'var(--red)'}">` +
+                  `${x.profit >= 0 ? 'profit' : 'loss'} ${money(Math.abs(x.profit))}</b>`;
+
+            return `
+              <div class="brow">
+                <div>
+                  <span class="bname">${esc(x.it.name)}</span>
+                  <span class="bsub">${sub}</span>
+                </div>
+                <div class="btrack">
+                  <i style="width:${Math.max(2, v / mx * 100)}%;background:${barCol}"></i>
+                </div>
+                <div class="bv">${money(v)}</div>
+              </div>`;
+          }).join('') +
+          `<div class="trow grand" style="max-width:420px;margin-left:auto">
+            <span class="lbl">${basis === 'cost' ? 'Total stock @ cost' : 'Total stock @ sale price'}</span>
+            <b style="font-size:17px">${money(basis === 'cost' ? totC : totS)}</b>
+          </div>`
+        : emptyHtml('box', 'No items yet');
+
+    } else {
+      const dim = tab === 'brand' ? 'brandId' : 'categoryId';
+      const pool = dim === 'brand' ? BRANDS() : CATS();
+
+      // Normalize IDs to strings and trim accidental whitespace.
+      const groups = groupBy(rows, x => {
+        const id = String(x.it?.[dim] ?? '').trim();
+        return id || '__na';
+      });
+
+      const arr = Object.keys(groups).map(id => {
+        const g = groups[id];
+
+       
+const normalizedId = String(id).trim();
+
+const src = id === '__na'
+  ? null
+  : (
+      dim === 'brand'
+        ? BRANDS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
+        : CATS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
+    ) || null;
+        const gcv = sum(g, x => x.cv);
+        const gsv = sum(g, x => x.sv);
+
+        return {
+
+name: id === '__na'
+  ? 'Unassigned'
+  : (
+      tab === 'brand'
+        ? (
+            BRANDS().find(b =>
+              String(b.id).trim() === String(id).trim()
+            )?.name || brandById(String(id).trim())?.name || String(id)
+          )
+        : (
+            CATS().find(c =>
+              String(c.id).trim() === String(id).trim()
+            )?.name || catById(String(id).trim())?.name || String(id)
+          )
+    ),          
+          qty: sum(g, x => x.qty),
+          cv: gcv,
+          sv: gsv,
+          profit: gsv - gcv
+        };
+      }).sort((a, b) => val(b) - val(a));
+
+      const tot = sum(arr, a => val(a)) || 1;
+
+      // Category-wise chart.
+      if (tab === 'category' && arr.length) {
+        const cols = [
+          '#0C6B4A', '#B23B2A', '#A9720E', '#16382A',
+          '#5B8A74', '#C98A6B', '#3E5C4B', '#8FA795'
+        ];
+
+        let acc = 0;
+
+        const stops = arr.map((a, i) => {
+          const s0 = acc / tot * 100;
+          acc += val(a);
+          const s1 = acc / tot * 100;
+
+          return `${cols[i % cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`;
+        }).join(',');
+
+        body += `
+          <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+            <div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none">
+              <div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column">
+                <span class="lbl">${basis === 'cost' ? '@ cost' : '@ sale'}</span>
+                <b class="mono" style="font-size:14px">${compact(tot)}</b>
+              </div>
+            </div>
+            <div style="flex:1;min-width:200px">
+              ${arr.map((a, i) => `
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px">
+                  <span style="display:flex;gap:8px;align-items:center">
+                    <i class="dot" style="background:${cols[i % cols.length]}"></i>
+                    ${esc(a.name)}
+                  </span>
+                  <span class="mono muted">${(val(a) / tot * 100).toFixed(1)}% · ${money(val(a))}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      }
+
+      const gmx = Math.max(1, ...arr.map(val));
+
+      body += arr.length
+        ? arr.map(a => {
+            const v = val(a);
+
+            return `
+              <div class="brow">
+                <div>
+                  <span class="bname">${esc(a.name)}</span>
+                  <span class="bsub">
+                    ${a.qty} pcs · cost ${money(a.cv)}${co ? '' :
+                      ` · sale ${money(a.sv)} · potential ${a.profit >= 0 ? '+' : '-'}${money(Math.abs(a.profit))}`}
+                  </span>
+                </div>
+                <div class="btrack">
+                  <i style="width:${Math.max(2, v / gmx * 100)}%;background:${barCol}"></i>
+                </div>
+                <div class="bv">${money(v)}</div>
+              </div>`;
+          }).join('')
+        : emptyHtml('layers', 'Nothing to value yet');
+    }
+
+    V().innerHTML = `
+      <div class="pagehead">
+        <div>
+          <div class="ptitle">Stock Valuation</div>
+          <div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div>
+        </div>
+      </div>
+
+      ${co ? '' : `
+        <div class="tabs" style="margin-bottom:8px">
+          <button class="chip ${basis === 'cost' ? 'on' : ''}" data-bs="cost">At Cost</button>
+          <button class="chip ${basis === 'sale' ? 'on' : ''}" data-bs="sale">At Sale Price</button>
+        </div>`}
+
+      <div class="sumrow">
+        ${sumTile('Stock @ cost', money(totC))}
+        ${co
+          ? sumTile('Units in stock', sum(rows, x => x.qty))
+          : sumTile('Stock @ sale price', money(totS), 'var(--amber)')}
+        ${co ? '' : sumTile('Potential profit', money(totP), totP >= 0 ? 'var(--green)' : 'var(--red)')}
+        ${co ? '' : sumTile('Potential margin', mg.toFixed(1) + '%', mg >= 0 ? 'var(--green)' : 'var(--red)')}
+      </div>
+
+      ${tabsHtml(key, tab, [
+        ['item', 'Item-wise'],
+        ['brand', 'Brand-wise'],
+        ['category', 'Category-wise']
+      ])}
+
+      <div class="card cardpad">${body}</div>
+
+      ${co ? '' : `
+        <p class="muted" style="font-size:12px;margin-top:10px">
+          <b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets).
+          <b>@ Sale price</b> values the same units at today's selling rates — potential revenue
+          if everything sells at list price; the difference is potential gross profit, before
+          discounts and expenses. Items without a brand/category set appear under
+          <b>Unassigned</b>.
+        </p>`}`;
+
+    qsa('[data-bs]').forEach(b => {
+      b.onclick = () => {
+        st.basis = b.dataset.bs;
+        draw();
+      };
+    });
+
+    bindTabs(key);
+  };
+
+  draw();
+}
+
 
 function vReportSales(){setTop('Sales Analysis');setActiveNav('r/sales');S.report.sales=S.report.sales||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='sales';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
@@ -1784,7 +2000,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
     <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role==='company'?'Company':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
-    ${t.role==='company'?`<button class="icon-btn" data-brands="${t.id}" title="Assign brands">${ic('layers',15)}</button>`:''}${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
+    ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
    <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
   else if(tab==='customers'){body=`<button class="btn btn-primary" id="tcNew" style="margin-bottom:12px">${ic('plus',16)}Create customer login</button>
    <div class="card"><div class="list">${custs.length?custs.map(t=>{const p=partyById(t.partyId);const bal=p?partyBalance(p.id):0;const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -1824,7 +2040,6 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
   qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
-  qsa('[data-brands]').forEach(b=>b.onclick=()=>openCompanyBrandsModal(USERS().find(x=>x.id===b.dataset.brands)));
   qsa('[data-resetm]').forEach(b=>b.onclick=()=>{const u2=USERS().find(x=>x.mobile===b.dataset.resetm);if(u2)openResetPwModal(u2,RESETS().find(r=>r.mobile===u2.mobile&&r.status==='pending')?.id)});
   qsa('[data-tg]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.tg);
    if(t.id===me.id)return toast("You can't disable yourself",'err');
@@ -1835,7 +2050,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
 async function openInviteModal(){const me=S.me;
- const roles=me.role==='super'?[['staff','Staff'],['admin','Admin']]:[['staff','Staff']];
+ const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ivForm">
   <div class="frow"><div class="field"><label class="fl">Role</label><select class="sel" id="iv-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div>
@@ -1860,27 +2075,22 @@ async function openTeamModal(){const me=S.me;
   <div class="frow"><div class="field"><label class="fl">Mobile (login ID)</label><input class="in" id="nu-user" required inputmode="numeric" placeholder="10-digit mobile"></div>
   <div class="field"><label class="fl">Role</label><select class="sel" id="nu-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div></div>
   <div class="field"><label class="fl">Password</label><input class="in" id="nu-pass" type="password" required></div>
-  <div id="nuBrands" class="field" style="display:none"><label class="fl">Allowed brands</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${BRANDS().map(b=>`<label class="sego"><input type="checkbox" name="nu-brand" value="${b.id}"><span>${esc(b.name)}</span></label>`).join('')}</div></div><div id="nuErr" class="notice red" style="display:none"></div>
+  <div id="nuErr" class="notice red" style="display:none"></div>
   <div class="muted" style="font-size:12px;margin-bottom:14px">Share the mobile + password privately. Prefer an invite code when the person uses their own device.</div>
   <button class="btn btn-primary" style="width:100%">Create account</button></form></div>`);
- $('#nu-role').onchange=()=>{$('#nuBrands').style.display=$('#nu-role').value==='company'?'block':'none'};
  $('#nuForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#nuErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
   const mob=normMobile($('#nu-user').value),name=$('#nu-name').value.trim(),pw=$('#nu-pass').value,role=$('#nu-role').value;
   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
   if(pw.length<4)return err('Password too short');
   if(role==='super'&&me.role!=='super')return err('Only a super admin can create another super admin');
-  const brandIds=role==='company'?Array.from(document.querySelectorAll('[name=nu-brand]:checked')).map(n=>n.value):[];if(role==='company'&&!brandIds.length)return err('Select at least one allowed brand');
   try{
    const newUid=await createAuthUser(mobileToEmail(mob),pw);
    const batch=DB.batch();
-   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,brandIds,active:true,created:Date.now()});
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,active:true,created:Date.now()});
    batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
    closeModal();toast('Account created — ID: '+mob);route()}
   catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
-function openCompanyBrandsModal(u){if(!u)return;const assigned=new Set(u.brandIds||[]);
- openModal(`<div class="mhead"><h3>Allowed brands · ${esc(u.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div><div class="mbody"><form id="cbmForm"><div style="display:grid;gap:10px">${BRANDS().map(b=>`<label class="sego"><input type="checkbox" name="company-brand" value="${b.id}" ${assigned.has(b.id)?'checked':''}><span>${esc(b.name)}</span></label>`).join('')}</div><p class="muted" style="font-size:12px;margin-top:12px">The company account will only receive stock data for these brands.</p><button class="btn btn-primary" style="width:100%;margin-top:14px">Save brand access</button></form></div>`);
- $('#cbmForm').onsubmit=e=>{e.preventDefault();const brandIds=Array.from(document.querySelectorAll('[name=company-brand]:checked')).map(n=>n.value);if(!brandIds.length)return toast('Select at least one brand','err');dbUpdate('users',u.id,{brandIds});closeModal();toast('Brand access saved');loadCompanyInventory().catch(()=>{});route()}}
 async function openCustomerModal(){
  openModal(`<div class="mhead"><h3>Create customer login</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ncForm">
@@ -2081,7 +2291,6 @@ function route(){
  if(a==='shop'||a==='cart'||a==='my-orders'){go('dash');return}
  if(u.role==='company'){
   if(a==='dash')return vDashCompany();
-  if(a==='items')return vItems();
   if(a==='r'&&p[1]==='stock')return vReportStock();
   go('dash');return}
  if(a==='dash')return vDash();
