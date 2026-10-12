@@ -1579,20 +1579,21 @@ function vReportStock() {
        
 const src = id === '__na'
   ? null
-  : (
-      dim === 'brand'
-        ? (brandById(id) || pool.find(z => String(z.id ?? '').trim() === id) || null)
-        : (catById(id) || pool.find(z => String(z.id ?? '').trim() === id) || null)
-    );
-
+  : (dim === 'brand'
+      ? BRANDS().find(z => z.id === id)
+      : CATS().find(z => z.id === id)
+    ) || null;
 
         const gcv = sum(g, x => x.cv);
         const gsv = sum(g, x => x.sv);
 
         return {
-          name: id === '__na'
-            ? 'Unassigned'
-            : (src?.name || `Unknown ID: ${id}`),
+
+name: id === '__na'
+  ? 'Unassigned'
+  : (src ? src.name : id),
+
+          
           qty: sum(g, x => x.qty),
           cv: gcv,
           sv: gsv,
