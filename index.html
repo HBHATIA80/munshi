@@ -1513,6 +1513,9 @@ function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.repo
   qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
   bindTabs(key)};
  draw()}
+
+
+
 function vReportSales(){setTop('Sales Analysis');setActiveNav('r/sales');S.report.sales=S.report.sales||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='sales';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
   const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
