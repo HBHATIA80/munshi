@@ -1597,7 +1597,7 @@ const src = id === '__na'
 
 name: id === '__na'
   ? 'Unassigned'
-  : (src ? src.name : id),
+  : (src?.name || `Unknown ID: ${id}`),
 
           
           qty: sum(g, x => x.qty),
