@@ -330,7 +330,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"369936746338",
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
-const SETUP_CODE='HARVINDER-BHATIA-1505';
+/* Setup key is stored as a SHA-256 hash in Firestore (collection 'setup', doc 'key', field 'hash') — never in this file. */
 const APP_VERSION='v3.5.1';
 
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
@@ -357,6 +357,7 @@ function numWords(n){n=Math.round(+n||0);const a=['','One','Two','Three','Four',
  return s.trim()+' Only'}
 function genInviteCode(){const AB='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';try{const r=new Uint32Array(6);crypto.getRandomValues(r);for(let i=0;i<6;i++)s+=AB[r[i]%AB.length]}catch(e){for(let i=0;i<6;i++)s+=AB[Math.floor(Math.random()*AB.length)]}return 'MST-'+s}
 function inviteState(v){if(v.used)return['used','Used'];if(v.days&&Date.now()>v.createdTs+v.days*864e5)return['expired','Expired'];return['open','Open']}
+async function sha256hex(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function copyText(t){const fb=()=>{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('Copied')}catch(e){toast('Copy failed — write it down','err')}ta.remove()};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('Copied'),fb);else fb()}
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
@@ -639,7 +640,7 @@ function renderSetup(){
    <p class="muted" style="font-size:13.5px;margin-bottom:16px">This business already has an owner. New staff & admins are invited from <b>Users & Customers → Invites</b>.</p>
    <a class="btn btn-primary" style="width:100%" href="#/login">Go to login</a></div>`);return}
  if(!S.setupOK){
-  const locked=SETUP_CODE==='CHANGE-ME-BEFORE-DEPLOY';
+  const locked=false;
   authShell(`<div class="card cardpad">
    <span class="lbl">One-time business setup</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Claim this business</h2>
@@ -651,9 +652,15 @@ function renderSetup(){
      <button class="btn btn-primary" style="width:100%" ${locked?'disabled':''}>Unlock setup</button>
    </form>
    <div class="authlinks"><a href="#/login">← Back to login</a></div></div>`);
-  $('#skForm').onsubmit=e=>{e.preventDefault();
-   if($('#sk').value.trim()!==SETUP_CODE){const n=$('#skErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>Wrong setup key.</span>';return}
-   S.setupOK=true;renderSetup()};
+    $('#skForm').onsubmit=async e=>{e.preventDefault();
+   const btn=$('#skForm').querySelector('button');if(btn)btn.disabled=true;
+   try{
+    let rec=null;try{rec=await DB.collection('setup').doc('key').get()}catch(ex){rec=null}
+    if(!rec||!rec.exists){const n=$('#skErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<div>No setup key is registered in the database yet. In Firebase Console → Firestore, create collection <b>setup</b>, document <b>key</b>, field <b>hash</b> (see the setup guide), then try again.</div>';return}
+    const entered=await sha256hex('munshi-setup::'+$('#sk').value.trim());
+    if(entered!==rec.data().hash){const n=$('#skErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>Wrong setup key.</span>';return}
+    S.setupOK=true;renderSetup()}
+   finally{const btn=$('#skForm').querySelector('button');if(btn)btn.disabled=false}};
   return}
  authShell(`<div class="card cardpad">
    <span class="lbl">Super admin</span>
@@ -686,7 +693,7 @@ function renderSetup(){
    batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
   }catch(ex){b.disabled=false;b.textContent='Create super admin & open books';
-   return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':'Setup failed: '+ex.code)}
+   return err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account — try signing in.':ex.code==='permission-denied'?'Setup is closed — this business already has an owner. Sign in instead.':'Setup failed: '+ex.code)}
  };
 }
 function renderJoin(){
