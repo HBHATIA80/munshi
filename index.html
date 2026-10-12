@@ -1597,9 +1597,19 @@ const src = id === '__na'
 
 name: id === '__na'
   ? 'Unassigned'
-  : (src?.name || `Unknown ID: ${id}`),
-
-          
+  : (
+      tab === 'brand'
+        ? (
+            BRANDS().find(b =>
+              String(b.id).trim() === String(id).trim()
+            )?.name || brandById(String(id).trim())?.name || String(id)
+          )
+        : (
+            CATS().find(c =>
+              String(c.id).trim() === String(id).trim()
+            )?.name || catById(String(id).trim())?.name || String(id)
+          )
+    ),          
           qty: sum(g, x => x.qty),
           cv: gcv,
           sv: gsv,
