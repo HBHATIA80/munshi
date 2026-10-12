@@ -1576,11 +1576,15 @@ function vReportStock() {
       const arr = Object.keys(groups).map(id => {
         const g = groups[id];
 
-        const src = id === '__na'
-          ? null
-          : pool.find(z =>
-              String(z.id ?? '').trim() === id
-            );
+       
+const src = id === '__na'
+  ? null
+  : (
+      dim === 'brand'
+        ? (brandById(id) || pool.find(z => String(z.id ?? '').trim() === id) || null)
+        : (catById(id) || pool.find(z => String(z.id ?? '').trim() === id) || null)
+    );
+
 
         const gcv = sum(g, x => x.cv);
         const gsv = sum(g, x => x.sv);
