@@ -2728,5 +2728,189 @@ new MutationObserver(ensureSideLinks).observe(document.body,{childList:true,subt
 ensureSideLinks();
 })();
 </script>
+<script>
+/* ==================================================================
+   MUNSHI v3.9 — PROFIT BREAKDOWN (Party / Brand / Sub-category)
+   • Route: #/r/profit-breakdown  (access mirrors can.profit: admin+)
+   • Auto-injects a "Breakdown" button on your existing Profit page
+   • Cost basis: weighted avg cost (same avgCost() as Stock Valuation)
+   • Sale returns are netted as reversals (revenue & cost both minus)
+   ================================================================== */
+(function(){
+'use strict';
+
+const pbAllowed=()=>!!(S.me&&RANK[S.me.role]>=2);           /* same gate as can.profit */
+const pbHashNow=()=>{const h=(location.hash||'').replace(/^#\/?/,'').split('?')[0];
+  return h==='r/profit-breakdown'||h==='profit-breakdown'};
+
+/* ---------- tolerant resolvers (works with your item field names) ---------- */
+function pbBrandName(it){
+  if(!it)return '(deleted item)';
+  if(it.brandId){const b=brandById(it.brandId);if(b&&b.name)return b.name}
+  if(typeof it.brand==='string'&&it.brand)return it.brand;
+  if(typeof it.brandName==='string'&&it.brandName)return it.brandName;
+  return 'No brand';
+}
+function pbSubName(it){
+  if(!it)return '(deleted item)';
+  const d=it.subCategory||it.subcategory||it.subCat||it.sub;
+  if(d&&typeof d==='string')return d;
+  const sid=it.subCategoryId||it.subCatId||it.subId;
+  if(sid){const c=catById(sid);if(c&&c.name)return c.name}
+  return 'No subcategory';
+}
+const pbPartyName=id=>{const p=id?partyById(id):null;return p?p.name:'Walk-in / Counter'};
+
+/* ---------- line-level profit records in the selected period ---------- */
+function pbRecords(from,to){
+  const recs=[];
+  const inR=d=>!d.date||((!from||d.date>=from)&&(!to||d.date<=to));
+  SALES().forEach(d=>{
+    if(!inR(d))return;
+    const sub=docSub(d);
+    LINES(d).forEach(l=>{
+      const it=itemById(l.itemId);
+      const gross=(+l.qty||0)*(+l.rate||0);
+      const net=gross-((+d.discount||0)*(sub?gross/sub:0));   /* same allocation as saleLinesOf() */
+      const cost=(+l.qty||0)*avgCost(it||{id:l.itemId});
+      recs.push({partyId:d.partyId||'',it,qty:+l.qty||0,rev:net,cost,profit:net-cost});
+    });
+  });
+  SRET().forEach(d=>{
+    if(!inR(d))return;
+    LINES(d).forEach(l=>{
+      const it=itemById(l.itemId);
+      const gross=(+l.qty||0)*(+l.rate||0);
+      const cost=(+l.qty||0)*avgCost(it||{id:l.itemId});
+      recs.push({partyId:d.partyId||'',it,qty:-(+l.qty||0),rev:-gross,cost:-cost,profit:cost-gross});
+    });
+  });
+  return recs;
+}
+function pbAgg(recs,keyFn,nameFn){
+  const m=new Map();
+  recs.forEach(r=>{
+    const k=keyFn(r);
+    const g=m.get(k)||{name:nameFn(r),qty:0,rev:0,cost:0,profit:0};
+    g.qty+=r.qty;g.rev+=r.rev;g.cost+=r.cost;g.profit+=r.profit;m.set(k,g);
+  });
+  return [...m.values()].sort((a,b)=>b.profit-a.profit);
+}
+
+/* ---------- state + period presets ---------- */
+const PB={tab:'party',quick:'month',from:'',to:''};
+function pbApplyQuick(q){
+  const t=todayISO();PB.quick=q;
+  if(q==='month'){PB.from=monthStart(t);PB.to=t}
+  else if(q==='lmonth'){const last=addDays(monthStart(t),-1);PB.from=monthStart(last);PB.to=last}
+  else if(q==='d30'){PB.from=addDays(t,-29);PB.to=t}
+  else{PB.from='';PB.to=''}
+}
+const TABS=[
+  ['party','Party-wise',      r=>r.partyId||'_w',  r=>pbPartyName(r.partyId)],
+  ['brand','Brand-wise',      r=>pbBrandName(r.it),r=>pbBrandName(r.it)],
+  ['sub',  'Sub-category-wise',r=>pbSubName(r.it), r=>pbSubName(r.it)]
+];
+
+/* ---------- view ---------- */
+function vProfitBreakdown(){
+  document.title='Profit Breakdown — Munshi';
+  if(PB.quick!=='custom')pbApplyQuick(PB.quick);
+  V().innerHTML=`
+  <div class="pagehead"><div><div class="ptitle">Profit Breakdown</div>
+    <div class="psub">Party-wise · Brand-wise · Sub-category-wise — avg-cost basis, returns netted.</div></div>
+    <button class="btn btn-ghost btn-sm" id="pbCsv">⤓ CSV</button></div>
+  <div class="card cardpad" style="margin-bottom:14px">
+    <div class="lbl" style="margin-bottom:8px">Period</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="chip ${PB.quick==='month'?'on':''}" data-q="month">This Month</button>
+      <button class="chip ${PB.quick==='lmonth'?'on':''}" data-q="lmonth">Last Month</button>
+      <button class="chip ${PB.quick==='d30'?'on':''}" data-q="d30">Last 30 Days</button>
+      <button class="chip ${PB.quick==='all'?'on':''}" data-q="all">All Time</button></div>
+    <div class="rdates"><input type="date" id="pbFrom" class="in" value="${esc(PB.from)}"><span class="muted">to</span>
+      <input type="date" id="pbTo" class="in" value="${esc(PB.to)}">
+      <button class="btn btn-ghost btn-sm" id="pbGo">Apply</button></div></div>
+  <div class="kpis" id="pbKpis"></div>
+  <div class="tabs" id="pbTabs"></div>
+  <div class="card" id="pbList"></div>`;
+  qsa('[data-q]').forEach(c=>c.onclick=()=>{pbApplyQuick(c.dataset.q);vProfitBreakdown()});
+  $('#pbGo').onclick=()=>{PB.from=$('#pbFrom').value;PB.to=$('#pbTo').value;PB.quick='custom';
+    qsa('[data-q]').forEach(x=>x.classList.remove('on'));pbRender()};
+  $('#pbCsv').onclick=pbCSV;
+  pbRender();
+}
+function pbRender(){
+  const recs=pbRecords(PB.from,PB.to);
+  const T=sum(recs,r=>r.rev),C=sum(recs,r=>r.cost),P=T-C;
+  $('#pbKpis').innerHTML=`
+    <div class="kpi"><div class="lbl">Revenue (net)</div><div class="kpiV">${esc(money(T))}</div><div class="kpiD">after discounts</div></div>
+    <div class="kpi"><div class="lbl">Cost of Goods</div><div class="kpiV">${esc(money(C))}</div><div class="kpiD">avg cost</div></div>
+    <div class="kpi ${P>=0?'tint-g':'tint-r'}"><div class="lbl">Gross Profit</div><div class="kpiV">${esc(money(P))}</div><div class="kpiD">returns netted</div></div>
+    <div class="kpi"><div class="lbl">Margin</div><div class="kpiV">${T>0?(P/T*100).toFixed(1)+'%':'—'}</div><div class="kpiD">gross</div></div>`;
+  $('#pbTabs').innerHTML=TABS.map(t=>`<button class="chip ${PB.tab===t[0]?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
+  qsa('#pbTabs [data-t]').forEach(b=>b.onclick=()=>{PB.tab=b.dataset.t;pbRender()});
+  const tab=TABS.find(x=>x[0]===PB.tab)||TABS[0];
+  const rows=pbAgg(recs,tab[2],tab[3]);
+  const GC='grid-template-columns:1fr 58px 104px 108px';
+  $('#pbList').innerHTML=rows.length?
+    `<div class="list" style="padding:6px 14px 14px">
+      <div class="lgrow hdr" style="${GC}"><div>${tab[1].replace('-wise','')}</div><div class="num">Qty</div><div class="num">Revenue</div><div class="num">Profit</div></div>`+
+    rows.map(g=>{
+      const mg=g.rev>0?(g.profit/g.rev*100).toFixed(1)+'%':'—';
+      const col=g.profit<0?'var(--red)':(g.profit>0?'var(--green)':'var(--ink2)');
+      return `<div class="lgrow" style="${GC}">
+        <div class="ld"><b>${esc(g.name)}</b><span>margin ${mg}${g.profit<0?' · LOSS':''}</span></div>
+        <div class="num">${g.qty}</div>
+        <div class="num">${esc(money(g.rev))}</div>
+        <div class="num" style="color:${col};font-weight:700">${esc(money(g.profit))}</div></div>`}).join('')+
+    `<div class="lgrow" style="${GC};border-top:2px solid var(--ink)">
+        <div class="ld"><b>Total</b></div><div class="num"></div>
+        <div class="num"><b>${esc(money(T))}</b></div>
+        <div class="num" style="color:${P<0?'var(--red)':'var(--green)'}"><b>${esc(money(P))}</b></div></div></div>`
+   :`<div class="empty"><div class="big">No sales in this period</div>Widen the period or check another tab.</div>`;
+}
+function pbCSV(){
+  const tab=TABS.find(x=>x[0]===PB.tab)||TABS[0];
+  const rows=pbAgg(pbRecords(PB.from,PB.to),tab[2],tab[3]);
+  const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const csv=['Name,Qty,Revenue,Cost,Profit,Margin%'].concat(rows.map(g=>
+    [q(g.name),g.qty,g.rev.toFixed(2),g.cost.toFixed(2),g.profit.toFixed(2),g.rev?(g.profit/g.rev*100).toFixed(1):0].join(','))).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='profit-'+PB.tab+'-'+(PB.from||'all')+'_'+(PB.to||'all')+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+
+/* ---------- integration: router, sidebar, button on existing Profit page ---------- */
+const _pbPrev=window.route;
+window.route=function(){
+  if(pbAllowed()&&pbHashNow()){vProfitBreakdown();pbMark();return}
+  return _pbPrev?_pbPrev.apply(this,arguments):undefined;
+};
+window.addEventListener('hashchange',()=>setTimeout(()=>{if(pbAllowed()&&pbHashNow())vProfitBreakdown();pbMark()},0));
+function pbMark(){const a=document.querySelector('.side [data-uilink="r/profit-breakdown"]');if(a)a.classList.toggle('on',pbHashNow())}
+function pbSideLink(){
+  const side=document.querySelector('.side');if(!side||side.querySelector('[data-uilink="r/profit-breakdown"]'))return;
+  const a=document.createElement('a');a.className='slink';a.dataset.uilink='r/profit-breakdown';a.href='#/r/profit-breakdown';
+  a.innerHTML='<svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19.5h16"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-8"/></svg><span>Profit Breakdown</span>';
+  const after=side.querySelector('[data-uilink="purchase-history"]');
+  if(after&&after.parentElement)after.insertAdjacentElement('afterend',a);else side.appendChild(a);
+  pbMark();
+}
+new MutationObserver(pbSideLink).observe(document.body,{childList:true,subtree:true});
+pbSideLink();
+/* inject a "Breakdown" button onto your existing Profit Analysis page */
+function pbInjectButton(){
+  if(!pbAllowed()||pbHashNow())return;
+  const t=document.querySelector('#view .ptitle');
+  if(!t||!/profit/i.test(t.textContent||''))return;
+  if(document.getElementById('pbGoBtn'))return;
+  const b=document.createElement('button');b.id='pbGoBtn';b.className='btn btn-ghost btn-sm';
+  b.textContent='Breakdown: Party / Brand / Sub-category';
+  b.onclick=()=>{location.hash='#/r/profit-breakdown'};
+  (t.closest('.pagehead')||t.parentElement).appendChild(b);
+}
+new MutationObserver(pbInjectButton).observe(document.getElementById('view'),{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
