@@ -1218,6 +1218,7 @@ function bindPulse(){const svg=V().querySelector('#pHit');if(!svg)return;
  svg.addEventListener('pointerleave',()=>{['pguide','pd1','pd2'].forEach(id=>$('#'+id)&&$('#'+id).setAttribute('opacity',0));const t=$('#pTip');if(t)t.style.display='none'})}
 
 
+'use strict';
 /* (continued — same file, appended into the single main script) */
 function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash settled':'Credit note';const b=(+d.total)-(+d.paid);return b<=0?'Paid':+d.paid>0?'Partial':'Unpaid'}
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
@@ -2369,7 +2370,7 @@ try{
 
 /* ============ CONFIG ============ */
 const COMPANY_CFG={
-  allowedRoutes:['r/stock','sales','collections','purchases','expenses','journals','purchase-history'],
+  allowedRoutes:['r/stock','sales','collections','purchases'],
   homeRoute:'r/stock',
   includePurchaseDocs:true   /* keep brand purchases → avgCost math stays correct */
 };
@@ -2819,6 +2820,8 @@ function markSide(){
 }
 function ensureSideLinks(){
   const side=document.querySelector('.side');
+  /* Expense, journal and item-history tools are not part of company access. */
+  if(isCompany())return;
   if(!side||!S.me||RANK[S.me.role]<1)return;
   if(side.querySelector('[data-uilink]'))return;
   const w=document.createElement('div');
