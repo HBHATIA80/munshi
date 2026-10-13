@@ -331,6 +331,51 @@ body.locked{overflow:hidden}
 
 <script>
 'use strict';
+/* ================================================================
+   MUNSHI — KEYBOARD SHORTCUTS REFERENCE
+   (implemented in the "keyboard layer" block below; help sheet: Shift+?)
+
+   GLOBAL — press when NOT typing in a field (staff/admin only):
+   ─────────────────────────────────────────────────────────────
+   N            → New Sale Invoice            (goes to #/sales/new)
+   P            → New Purchase Invoice        (goes to #/purchases/new)
+   C            → New Collection              (goes to #/collections/new)
+   Y            → New Payment                 (goes to #/payments/new)
+   O            → Orders list                 (goes to #/orders)
+   I            → Items catalogue             (goes to #/items)
+   T            → Stock Valuation             (goes to #/r/stock)
+   L            → Ledger                      (goes to #/ledger)
+   D            → Dashboard                   (goes to #/dash)
+   /            → Focus the page search box (selects text)
+   Shift + ?    → Keyboard shortcut help sheet
+   Esc          → Close topmost layer: sheet → modal → suggestion list
+   [            → "From" date − 1 day  (dashboard Period Check / report range bars)
+   ]            → "To"   date − 1 day  (same places)
+
+   INSIDE LIVE-SEARCH SUGGESTION BOXES (customer/item/party pickers):
+   ─────────────────────────────────────────────────────────────
+   ArrowDown    → Highlight next suggestion (wraps around)
+   ArrowUp      → Highlight previous suggestion
+   Enter        → Pick the highlighted suggestion (first one if none highlighted)
+   Esc          → Close the suggestion list
+   Tab          → Default browser focus move to next field
+
+   IN ANY FORM (invoice, item, party, settings, payment, etc.):
+   ─────────────────────────────────────────────────────────────
+   Tab / Shift+Tab   → Move between fields (standard browser behaviour)
+   Ctrl+S / Cmd+S    → Save the currently open form (invoice, item, party,
+                       stock adjust, customer login, registration, etc.)
+   Enter             → Submits form when a plain button has focus
+
+   NOTES:
+   • Single-letter shortcuts are IGNORED while typing in any input,
+     textarea or select, while Ctrl/Alt/Cmd is held, and while any
+     modal or sheet is open — they can never corrupt data entry.
+   • Shortcuts are DISABLED on the customer portal (shop/cart/orders)
+     — customers get plain UI.
+   • The engine lives in the "keyboard layer" block; dropdown arrow/
+     Enter support is wired inside attachCombo() via KB.combo state.
+   ================================================================ */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyBFuvEGEhc7vC2j6XgH9bb6PnR-NjIfwDo",
   authDomain:"munshi-91aa9.firebaseapp.com",
@@ -386,7 +431,7 @@ function attachCombo(input,opts){
    return}
   box=document.createElement('div');box.className='combo';
   box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');  insert();
-  KB.combo=box;KB.comboItems=[...box.querySelectorAll('.combo-it')];KB.comboIndex=-1;KB.comboPick=idx=>{const o=pool[idx];input.value=o.label;close();opts.onPick&&opts.onPick(o)};
+  KB.combo=box;KB.comboItems=[...box.querySelectorAll('.combo-it')];KB.comboIndex=-1;KB.comboPick=idx=>{const o=pool[idx];input.value=o.label;close();opts.onPick&&opts.onPick(o)};KB.comboInput=input;
   box.querySelectorAll('.combo-it').forEach(el=>{
    el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
 
@@ -596,7 +641,7 @@ const navItems=u=>u.role==='company'?[{g:'',items:[['dash','Home','home'],['r/st
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
 
 /* ============ keyboard layer (desktop) ============ */
-const KB={open:false,combo:null,comboItems:[],comboPick:null,comboIndex:-1};
+const KB={open:false,combo:null,comboItems:[],comboPick:null,comboIndex:-1,comboInput:null};
 function kbHelp(){openSheet(`<div class="shhead"><b>Keyboard shortcuts</b><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
  <div class="shg"><span class="lbl">Global</span>
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">N</b> New Sale Invoice</div>
@@ -612,10 +657,10 @@ function kbHelp(){openSheet(`<div class="shhead"><b>Keyboard shortcuts</b><butto
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Shift + ?</b> This help</div>
  </div>
  <div class="shg"><span class="lbl">In forms & search</span>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Tab</b> Move to next field</div>
+    <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Tab</b> Dropdown open: select highlighted item + go to next field</div>
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">↑ ↓</b> Pick from live suggestions</div>
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Enter</b> Confirm selection</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Esc</b> Close suggestion / dialog</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Esc</b> Close suggestion list first, then dialogs/sheets</div>
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">[ / ]</b> From date / To date -1 day</div>
   <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Ctrl + S</b> Save the open form</div>
  </div><div style="height:10px"></div>`)}
@@ -626,26 +671,39 @@ function kbComboHighlight(){const its=KB.comboItems;if(!its.length)return;
  const el=its[KB.comboIndex];if(!el)return;
  el.style.background='var(--paper)';
  if(el.scrollIntoView)el.scrollIntoView({block:'nearest'})}
+
+
 function kbComboKey(e){
  if(!KB.combo||!KB.comboItems.length)return false;
+ const pickIdx=()=>{if(KB.comboIndex<0)KB.comboIndex=0;const el=KB.comboItems[KB.comboIndex];if(el&&KB.comboPick)KB.comboPick(+el.dataset.i)};
  if(e.key==='ArrowDown'){e.preventDefault();KB.comboIndex=(KB.comboIndex+1)%KB.comboItems.length;kbComboHighlight();return true}
  if(e.key==='ArrowUp'){e.preventDefault();KB.comboIndex=(KB.comboIndex-1+KB.comboItems.length)%KB.comboItems.length;kbComboHighlight();return true}
- if(e.key==='Enter'){if(KB.comboIndex<0)KB.comboIndex=0;e.preventDefault();const el=KB.comboItems[KB.comboIndex];if(el&&KB.comboPick)KB.comboPick(+el.dataset.i);return true}
+ if(e.key==='Enter'){e.preventDefault();pickIdx();return true}
+ if(e.key==='Tab'){e.preventDefault();pickIdx();
+  const inp=KB.comboInput;setTimeout(()=>{if(!inp)return;
+   const f=[...document.querySelectorAll('input,select,textarea,button')].filter(x=>!x.disabled&&x.offsetParent!==null);
+   const idx=f.indexOf(inp);if(idx>-1&&f[idx+1])f[idx+1].focus()},0);return true}
  if(e.key==='Escape'){e.preventDefault();KB.comboIndex=-1;if(KB.combo){KB.combo.remove();KB.combo=null}KB.comboItems=[];return true}
  return false}
+
 document.addEventListener('keydown',e=>{
  const tgt=e.target||{};
  const tag=(tgt.tagName||'').toUpperCase();
  const typing=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||tgt.isContentEditable);
- /* Esc closes topmost layer first */
+ /* combo navigation first — dropdown keys win over global keys */
+ if(KB.combo&&KB.comboItems.length&&kbComboKey(e))return;
+ 
+ /* dropdown keys win first: Tab selects, Esc closes list, arrows move, Enter picks */
+ if(KB.combo&&KB.comboItems.length&&kbComboKey(e))return;
+ /* Esc then closes topmost layer: sheet → modal */
  if(e.key==='Escape'){
   if($('#sheetRoot').innerHTML){closeSheet();return}
   if($('#modalRoot').innerHTML){closeModal();return}
   return}
- /* combo navigation when a suggestion list is open */
- if(KB.combo&&KB.comboItems.length&&kbComboKey(e))return;
+
  /* Tab: default browser behaviour already moves between fields; nothing to do */
  if(e.key==='Tab')return;
+
  /* Ctrl+S saves the open form */
  if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){
   const f=document.querySelector('#docForm,#mfForm,#stForm,#imForm,#pmForm,#saForm,#cbForm,#rpForm,#apForm,#nuForm,#ncForm,#pwForm,#rgForm,#skForm,#suForm,#jcForm,#jf,#fgForm,#authForm');
