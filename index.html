@@ -2887,6 +2887,120 @@ function pbCSV(){
   a.download='profit-'+PB.tab+'-'+(PB.from||'all')+'_'+(PB.to||'all')+'.csv';a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
+<script>
+/* ==================================================================
+   MUNSHI v3.10 — BRAND-SCOPED COMPANY USER (fixes mobile data leak)
+   • Company user's `state` now contains ONLY their allocated brand's
+     docs → every view (desktop AND mobile) shows correct data
+   • Route guard: company user can only open allowed pages
+   • Nav links to blocked pages are hidden on mobile + desktop
+   ================================================================== */
+(function(){
+'use strict';
+try{
 
+/* ---------------- CONFIG — adjust here ---------------- */
+const COMPANY_CFG={
+  /* field on the USER doc (Firestore → users → this user) that holds the brand allocation.
+     Tried in this order — keep whichever exists, delete the rest: */
+  brandField:['brandId','brand','brandName'],
+  /* route prefixes this user may open (your requirement: stock, sales, collections) */
+  allowedRoutes:['r/stock','sales','collections'],
+  homeRoute:'r/stock',
+  /* Purchase/return docs of their brand are kept so Stock Valuation math is correct
+     (stock = opening + purchases − sales). Set false to hide them from data too,
+     but stock figures will then be wrong. Nav links are hidden regardless. */
+  includePurchaseDocs:true
+};
+/* ------------------------------------------------------ */
+
+const isCompany=()=>!!(S.me&&S.me.role==='company');
+function myBrandId(){
+  if(!isCompany())return null;
+  for(const f of COMPANY_CFG.brandField){if(S.me[f])return String(S.me[f])}
+  if(Array.isArray(S.me.brands)&&S.me.brands.length)return String(S.me.brands[0]);
+  return null;
+}
+function itemBrandKey(it){
+  if(!it)return '';
+  if(it.brandId)return String(it.brandId);
+  if(it.brand)return String(it.brand);
+  if(it.brandName)return String(it.brandName);
+  return '';
+}
+
+/* raw unfiltered docs kept privately; state gets only the filtered slice */
+const RAW={};
+let warned=false;
+function recomputeCompany(){
+  const bid=myBrandId();
+  if(!bid){
+    if(!warned){warned=true;console.warn('v3.10: company user has no brand field — nothing shown. Check COMPANY_CFG.brandField vs the user doc in Firestore.')}
+    ['items','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(c=>state[c]=[]);
+    return;
+  }
+  const allItems=RAW.items||[];
+  const items=allItems.filter(it=>itemBrandKey(it)===bid);
+  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&itemBrandKey(it)===bid};
+  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId));   /* mixed-brand invoices are excluded */
+  state.items=items;
+  state.brands=(RAW.brands||[]).filter(b=>b.id===bid);
+  state.categories=RAW.categories||[];               /* labels only — contains no sales data */
+  state.sales=(RAW.sales||[]).filter(linesOk);
+  state.saleReturns=(RAW.saleReturns||[]).filter(linesOk);
+  state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
+  state.purchaseReturns=COMPANY_CFG.includePurchaseDocs?(RAW.purchaseReturns||[]).filter(linesOk):[];
+  state.stockAdj=(RAW.stockAdj||[]).filter(a=>a&&itemOk(a.itemId));
+  /* collections = receipts from parties who bought this brand */
+  const partyIds=new Set(state.sales.map(s=>s.partyId).filter(Boolean));
+  state.receipts=(RAW.receipts||[]).filter(r=>r.partyId&&partyIds.has(r.partyId));
+  /* everything else the company user must never see */
+  state.payments=[];state.parties=[];state.orders=[];state.users=[];
+}
+
+function subscribeCompany(){
+  const COLS=['items','categories','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'];
+  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
+    RAW[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+    recomputeCompany();onLive();
+  },err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
+  COLS.forEach(sub);
+  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
+}
+
+/* wrap subscribeAll: company users get the scoped subscription, everyone else unchanged */
+const _sa=window.subscribeAll;
+window.subscribeAll=function(me){
+  if(me&&me.role==='company'){subscribeCompany();return}
+  return _sa?_sa.apply(this,arguments):undefined;
+};
+
+/* route guard + nav hiding */
+const hashNow=()=>(location.hash||'').replace(/^#\/?/,'').split('?')[0];
+const allowed=h=>!h||COMPANY_CFG.allowedRoutes.some(p=>h===p||h.indexOf(p+'/')===0);
+function companyGuard(){
+  if(!isCompany())return false;
+  const h=hashNow();
+  if(h===''||h==='dash'){location.hash='#/'+COMPANY_CFG.homeRoute;return true}
+  if(!allowed(h)){location.hash='#/'+COMPANY_CFG.homeRoute;toast('Your login is limited to your brand','err');return true}
+  return false;
+}
+const _r10=window.route;
+window.route=function(){if(companyGuard())return;return _r10?_r10.apply(this,arguments):undefined};
+window.addEventListener('hashchange',()=>setTimeout(()=>{try{companyGuard()}catch(e){}},0));
+function hideBlockedNav(){
+  if(!isCompany())return;
+  qsa('a[href^="#/"]').forEach(el=>{
+    const h=(el.getAttribute('href')||'').replace(/^#\/?/,'').split('?')[0];
+    if(h&&!allowed(h))el.style.display='none';
+  });
+}
+new MutationObserver(()=>{try{hideBlockedNav()}catch(e){}}).observe(document.body,{childList:true,subtree:true});
+hideBlockedNav();
+
+}catch(err){console.error('v3.10 brand-scope failed:',err)}
+})();
+</script>
 </body>
 </html>
