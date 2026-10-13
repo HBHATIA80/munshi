@@ -2909,7 +2909,7 @@ function pbInjectButton(){
   b.onclick=()=>{location.hash='#/r/profit-breakdown'};
   (t.closest('.pagehead')||t.parentElement).appendChild(b);
 }
-new MutationObserver(pbInjectButton).observe(document.getElementById('view'),{childList:true,subtree:true});
+new MutationObserver(pbInjectButton).observe(document.body,{childList:true,subtree:true});
 })();
 </script>
 </body>
