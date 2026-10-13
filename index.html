@@ -374,7 +374,8 @@ const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.len
 
 function attachCombo(input,opts){
  let box=null;
- const close=()=>{if(box){box.remove();box=null}};
+
+ const close=()=>{if(box){box.remove();box=null}KB.combo=null;KB.comboItems=[];KB.comboIndex=-1};
  const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
  const open=()=>{
   const q=(input.value||'').trim().toLowerCase();
@@ -384,13 +385,14 @@ function attachCombo(input,opts){
    if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
    return}
   box=document.createElement('div');box.className='combo';
-  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
-  insert();
+  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');  insert();
+  KB.combo=box;KB.comboItems=[...box.querySelectorAll('.combo-it')];KB.comboIndex=-1;KB.comboPick=idx=>{const o=pool[idx];input.value=o.label;close();opts.onPick&&opts.onPick(o)};
   box.querySelectorAll('.combo-it').forEach(el=>{
    el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
+
  };
- input.addEventListener('input',open);
- input.addEventListener('focus',open);
+  input.addEventListener('input',()=>{KB.comboIndex=-1;open()});
+  input.addEventListener('focus',()=>{KB.comboIndex=-1;open()});
  input.addEventListener('blur',()=>setTimeout(close,160));
 }
 
@@ -592,6 +594,90 @@ const NAVG=[
  {g:'Admin',items:[['users','Users & Customers','user',2],['settings','Settings','gear',2]]}];
 const navItems=u=>u.role==='company'?[{g:'',items:[['dash','Home','home'],['r/stock','Stock Valuation','box']]}]:NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
+
+/* ============ keyboard layer (desktop) ============ */
+const KB={open:false,combo:null,comboItems:[],comboPick:null,comboIndex:-1};
+function kbHelp(){openSheet(`<div class="shhead"><b>Keyboard shortcuts</b><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
+ <div class="shg"><span class="lbl">Global</span>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">N</b> New Sale Invoice</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">P</b> New Purchase Invoice</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">C</b> New Collection</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Y</b> New Payment</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">O</b> Orders</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">I</b> Items</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">T</b> Stock Valuation</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">L</b> Ledger</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">D</b> Dashboard</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">/</b> Focus search box on this page</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Shift + ?</b> This help</div>
+ </div>
+ <div class="shg"><span class="lbl">In forms & search</span>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Tab</b> Move to next field</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">↑ ↓</b> Pick from live suggestions</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Enter</b> Confirm selection</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Esc</b> Close suggestion / dialog</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">[ / ]</b> From date / To date -1 day</div>
+  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Ctrl + S</b> Save the open form</div>
+ </div><div style="height:10px"></div>`)}
+
+function kbComboHighlight(){const its=KB.comboItems;if(!its.length)return;
+ its.forEach(el=>el.style.background='');
+ if(KB.comboIndex<0)return;
+ const el=its[KB.comboIndex];if(!el)return;
+ el.style.background='var(--paper)';
+ if(el.scrollIntoView)el.scrollIntoView({block:'nearest'})}
+function kbComboKey(e){
+ if(!KB.combo||!KB.comboItems.length)return false;
+ if(e.key==='ArrowDown'){e.preventDefault();KB.comboIndex=(KB.comboIndex+1)%KB.comboItems.length;kbComboHighlight();return true}
+ if(e.key==='ArrowUp'){e.preventDefault();KB.comboIndex=(KB.comboIndex-1+KB.comboItems.length)%KB.comboItems.length;kbComboHighlight();return true}
+ if(e.key==='Enter'){if(KB.comboIndex<0)KB.comboIndex=0;e.preventDefault();const el=KB.comboItems[KB.comboIndex];if(el&&KB.comboPick)KB.comboPick(+el.dataset.i);return true}
+ if(e.key==='Escape'){e.preventDefault();KB.comboIndex=-1;if(KB.combo){KB.combo.remove();KB.combo=null}KB.comboItems=[];return true}
+ return false}
+document.addEventListener('keydown',e=>{
+ const tgt=e.target||{};
+ const tag=(tgt.tagName||'').toUpperCase();
+ const typing=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||tgt.isContentEditable);
+ /* Esc closes topmost layer first */
+ if(e.key==='Escape'){
+  if($('#sheetRoot').innerHTML){closeSheet();return}
+  if($('#modalRoot').innerHTML){closeModal();return}
+  return}
+ /* combo navigation when a suggestion list is open */
+ if(KB.combo&&KB.comboItems.length&&kbComboKey(e))return;
+ /* Tab: default browser behaviour already moves between fields; nothing to do */
+ if(e.key==='Tab')return;
+ /* Ctrl+S saves the open form */
+ if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){
+  const f=document.querySelector('#docForm,#mfForm,#stForm,#imForm,#pmForm,#saForm,#cbForm,#rpForm,#apForm,#nuForm,#ncForm,#pwForm,#rgForm,#skForm,#suForm,#jcForm,#jf,#fgForm,#authForm');
+  if(f){e.preventDefault();f.requestSubmit?f.requestSubmit():f.submit()}return}
+ /* [ and ] : step dates back one day (dashboard period check & report range bars) */
+ if((e.key==='['||e.key===']')&&!typing){
+  const f=V().querySelector('.rfrom'),t2=V().querySelector('.rto'),df=document.querySelector('#dcFrom'),dt=document.querySelector('#dcTo');
+  const el=e.key==='['?(f||df):(t2||dt);
+  if(el&&el.value){e.preventDefault();const d=new Date(el.value+'T00:00:00');d.setDate(d.getDate()-1);
+   el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+   el.dispatchEvent(new Event('change'))}
+  return}
+ /* single-letter shortcuts: only when not typing and no dialog open */
+ if(typing||e.ctrlKey||e.metaKey||e.altKey)return;
+ if($('#modalRoot').innerHTML||$('#sheetRoot').innerHTML)return;
+ const me=S.me;if(!me)return;
+ if(me.role==='customer')return;
+ const k=e.key.toLowerCase();
+ const go2=p=>{e.preventDefault();go(p)};
+ if(k==='n')return go2('sales/new');
+ if(k==='p')return go2('purchases/new');
+ if(k==='c')return go2('collections/new');
+ if(k==='y')return go2('payments/new');
+ if(k==='o')return go2('orders');
+ if(k==='i')return go2('items');
+ if(k==='t')return go2('r/stock');
+ if(k==='l')return go2('ledger');
+ if(k==='d')return go2('dash');
+ if(e.key==='/'){e.preventDefault();const s=V().querySelector('.searchbar input,.searchbar .in');if(s){s.focus();if(s.select)s.select()}return}
+ if(e.key==='?'){e.preventDefault();kbHelp();return}
+});
+
 
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.innerHTML=ic(type==='err'?'alert':'check',16)+esc(msg);$('#toastRoot').appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),320)},2600)}
 function openModal(html){$('#modalRoot').innerHTML=`<div class="mask" id="mMask"><div class="modal">${html}</div></div>`;document.body.classList.add('locked');$('#mMask').addEventListener('click',e=>{if(e.target.id==='mMask')closeModal()})}
