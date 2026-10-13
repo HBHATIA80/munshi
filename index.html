@@ -2342,17 +2342,27 @@ window.closeModal=closeModal;
 </script>
 <script>
 /* ==================================================================
-   MUNSHI v3.8 UPGRADE — drop-in, zero-edit integration
-   1) Add-a-Row focus (click + Tab) on Sales/Purchase vouchers
-   2) Last purchase price hint while entering items (both vouchers)
-   3) Sidebar: Item Purchase History (last 10, extendable w/ dates)
-   4) Expenses + custom Heads
-   5) Journal Vouchers (party-to-party settlement) wired into ledger
+   MUNSHI CONSOLIDATED UPGRADE LAYER (replaces v3.8 + v3.9 + v3.10)
+   1 Add-a-Row focus (click + Tab)   2 Last-purchase-price hints
+   3 Item Purchase History page      4 Expenses + custom Heads
+   5 Journal Vouchers (party-to-party) in ledgers
+   6 Brand-scoped company user (fixes mobile data leak)
    ================================================================== */
-'use strict';
 (function(){
+'use strict';
+try{
 
-/* ---------- tiny UI helpers (self-contained, no clobbering) ---------- */
+/* ============ CONFIG ============ */
+const COMPANY_CFG={
+  brandField:['brandId','brand','brandName'],  /* field on the company USER doc holding the brand */
+  allowedRoutes:['r/stock','sales','collections'],
+  homeRoute:'r/stock',
+  includePurchaseDocs:true   /* brand purchases kept so Stock Valuation math stays correct */
+};
+const AUTO_LAST_RATE_ON_PURCHASE=true;
+/* ================================ */
+
+/* ---------- helpers ---------- */
 const UI_TRASH='<svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/></svg>';
 const UI_PEN='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l4-1L20 7l-3-3L5 16l-1 4z"/></svg>';
 const UI_SVG={
@@ -2368,35 +2378,78 @@ function uiModal(title,body,foot){
      <div class="mbody">${body}</div>${foot?`<div class="mfoot">${foot}</div>`:''}</div></div>`;
   document.body.classList.add('locked');
 }
-window.__uiClose=function(){
-  document.getElementById('modalRoot').innerHTML='';
-  document.body.classList.remove('locked');
-};
-/* if anything else clears the modal root, unlock the page too */
+window.__uiClose=function(){document.getElementById('modalRoot').innerHTML='';document.body.classList.remove('locked')};
 new MutationObserver(()=>{if(!document.getElementById('modalRoot').innerHTML)document.body.classList.remove('locked')})
   .observe(document.getElementById('modalRoot'),{childList:true});
-/* Esc closes our modal first (capture phase) */
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&document.querySelector('#modalRoot [data-uimodal]')){e.stopPropagation();window.__uiClose()}
 },true);
 
-/* ---------- new state slices + collections ---------- */
-state.expenses=state.expenses||[]; state.expenseHeads=state.expenseHeads||[]; state.journals=state.journals||[];
-COLLECTION_KEYS.push('expenses','expenseHeads','journals');   // admin/super: auto-subscribed by existing code
-const _subscribeAll=window.subscribeAll;                       // role 'company': patch its hardcoded list
+/* ---------- new collections ---------- */
+['expenses','expenseHeads','journals'].forEach(k=>{if(!COLLECTION_KEYS.includes(k))COLLECTION_KEYS.push(k)});
+state.expenses=state.expenses||[];state.expenseHeads=state.expenseHeads||[];state.journals=state.journals||[];
+
+/* ========== 6) BRAND-SCOPED COMPANY USER (v3.10.1 — fixed) ========== */
+const isCompany=()=>!!(S.me&&S.me.role==='company');
+function myBrandId(){
+  if(!isCompany())return null;
+  for(const f of COMPANY_CFG.brandField){if(S.me[f])return String(S.me[f])}
+  if(Array.isArray(S.me.brands)&&S.me.brands.length)return String(S.me.brands[0]);
+  return null;
+}
+function itemBrandKey(it){
+  if(!it)return '';
+  if(it.brandId)return String(it.brandId);
+  if(it.brand)return String(it.brand);
+  if(it.brandName)return String(it.brandName);
+  return '';
+}
+const RAW={};let noBrandWarned=false;
+function recomputeCompany(){
+  const bid=myBrandId();
+  if(!bid){
+    if(!noBrandWarned){noBrandWarned=true;
+      console.warn('UPGRADE: company user has no brand field — nothing shown. Check COMPANY_CFG.brandField vs the user doc.')}
+    ['items','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(c=>state[c]=[]);
+    return;
+  }
+  const allItems=RAW.items||[];
+  const items=allItems.filter(it=>itemBrandKey(it)===bid);
+  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&itemBrandKey(it)===bid};
+  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId)); /* mixed-brand invoices excluded */
+  state.items=items;
+  state.brands=(RAW.brands||[]).filter(b=>b.id===bid);
+  state.categories=RAW.categories||[];              /* labels only — no sales data */
+  state.sales=(RAW.sales||[]).filter(linesOk);
+  state.saleReturns=(RAW.saleReturns||[]).filter(linesOk);
+  state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
+  state.purchaseReturns=COMPANY_CFG.includePurchaseDocs?(RAW.purchaseReturns||[]).filter(linesOk):[];
+  state.stockAdj=(RAW.stockAdj||[]).filter(a=>a&&itemOk(a.itemId));
+  /* keep only parties connected to this brand → names render, nothing else leaks */
+  const partyIds=new Set();
+  state.sales.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
+  state.saleReturns.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
+  state.receipts=(RAW.receipts||[]).filter(r=>r.partyId&&partyIds.has(r.partyId));
+  state.parties=(RAW.parties||[]).filter(p=>partyIds.has(p.id));
+  state.payments=[];state.orders=[];state.users=[];
+}
+function subscribeCompany(){
+  const COLS=['items','categories','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'];
+  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
+    RAW[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+    recomputeCompany();onLive();
+  },err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
+  COLS.forEach(sub);
+  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
+  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
+}
+const _subscribeAllOrig=window.subscribeAll;
 window.subscribeAll=function(me){
-  const r=_subscribeAll?_subscribeAll.apply(this,arguments):undefined;
-  try{ if(me&&me.role==='company'){
-    ['expenses','expenseHeads','journals'].forEach(c=>{
-      S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
-        state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive();
-      },err=>{if(err.code!=='permission-denied')console.error(c,err)}));
-    });
-  }}catch(e){console.error(e)}
-  return r;
+  if(me&&me.role==='company'){subscribeCompany();return}   /* scoped; staff/admin/super unchanged via COLLECTION_KEYS */
+  return _subscribeAllOrig?_subscribeAllOrig.apply(this,arguments):undefined;
 };
 
-/* ================= FEATURE 2 — last purchase price helpers ================= */
+/* ========== 2) LAST PURCHASE PRICE ========== */
 function lastPurchasesOf(itemId,limit){
   const rows=[];
   PURCHASES().forEach(d=>LINES(d).forEach(l=>{
@@ -2429,15 +2482,13 @@ function showLastRateHint(rowEl,itemId){
   h.innerHTML='Last purchase: <b>'+esc(money(info.rate))+'</b> · '+esc(fmtDate(info.date))
     +(info.partyName?' · '+esc(info.partyName):'')+(info.no?' · '+esc(info.no):'');
 }
-/* typed (non-pick) entry also shows the hint */
 document.addEventListener('input',e=>{
   const cell=e.target.closest&&e.target.closest('.fl-item');if(!cell)return;
   const name=(e.target.value||'').trim().toLowerCase();
   const it=ITEMS().find(x=>(x.name||'').toLowerCase()===name);
   showLastRateHint(cell.closest('.fline')||cell,it?it.id:null);
 });
-/* wrap attachCombo: on PICK show hint, and on PURCHASE vouchers prefill last buy rate */
-const _attachCombo=window.attachCombo;
+const _attachComboOrig=window.attachCombo;
 window.attachCombo=function(input,opts){
   const _pick=opts&&opts.onPick;
   const wrapped=Object.assign({},opts,{onPick:o=>{
@@ -2446,7 +2497,7 @@ window.attachCombo=function(input,opts){
       const cell=input.closest&&input.closest('.fl-item');
       const it=resolveItemFromPick(o,input);
       if(cell)showLastRateHint(cell.closest('.fline')||cell,it?it.id:null);
-      if(it&&/purchases/.test(location.hash||'')){
+      if(it&&AUTO_LAST_RATE_ON_PURCHASE&&/purchases/.test(location.hash||'')){
         const row=cell&&cell.closest('.fline');
         const rInp=row&&row.querySelector('.fl-rate input');
         const lp=lastPurchaseInfo(it.id);
@@ -2454,10 +2505,10 @@ window.attachCombo=function(input,opts){
       }
     });
   }});
-  return _attachCombo(input,wrapped);
+  return _attachComboOrig(input,wrapped);
 };
 
-/* ================= FEATURE 1 — Add-a-Row focus + Tab auto-add ================= */
+/* ========== 1) ADD-A-ROW FOCUS ========== */
 function findAddRowBtn(){
   return [...document.querySelectorAll('button,.chip,a.btn')].find(el=>{
     const t=(el.textContent||'').trim();
@@ -2485,12 +2536,11 @@ document.addEventListener('keydown',e=>{
   e.preventDefault();btn.click();doubleRaf(focusLastLineInput);
 });
 
-/* ================= FEATURE 5 — Journal Vouchers (party-to-party) ================= */
+/* ========== 5) JOURNAL VOUCHERS ========== */
 const JV=()=>state.journals||[];
-/* ledger integration: wrap partyEntries, append JV legs, re-sort exactly like the original */
-const _partyEntries=window.partyEntries;
+const _partyEntriesOrig=window.partyEntries;
 window.partyEntries=function(pid){
-  const es=_partyEntries(pid);
+  const es=_partyEntriesOrig(pid);
   JV().forEach(j=>{
     if(j.creditPartyId===pid){const o=partyById(j.debitPartyId);
       es.push({date:j.date,desc:'Journal — paid '+(o?o.name:'other party')+' directly on our behalf',ref:j.no||'',dr:0,cr:+j.amount,pr:4,_c:j.created});}
@@ -2547,7 +2597,7 @@ function jrForm(id){
   };
 }
 
-/* ================= FEATURE 4 — Expenses + custom Heads ================= */
+/* ========== 4) EXPENSES ========== */
 const EXP_MODES=['Cash','Bank','UPI','Card','Cheque','Other'];
 const HEADS=()=>state.expenseHeads||[],EXPENSES=()=>state.expenses||[];
 const headById=id=>HEADS().find(h=>h.id===id);
@@ -2609,7 +2659,6 @@ function expForm(id){
     <div class="field"><label class="fl">Note</label><input id="exNote" class="in" value="${esc(ex?ex.note||'':'')}" placeholder="e.g. Tea & snacks for shop"></div>`,
     `<button class="btn btn-ghost" onclick="window.__uiClose()">Cancel</button><button class="btn btn-primary" id="exSave">${ex?'Save Changes':'Add Expense'}</button>`);
   $('#exNewHead').onclick=e=>{e.preventDefault();expHeadsModal()};
-  /* keep the head <select> fresh while modal is open (heads arrive via snapshot) */
   let n=0;const t=setInterval(()=>{n++;const s=$('#exHead');if(!s||n>8){clearInterval(t);return}
     const cur=s.value;s.innerHTML=headOptionsHTML(cur);if(cur)s.value=cur},400);
   $('#exSave').onclick=async()=>{
@@ -2622,7 +2671,6 @@ function expForm(id){
   };
 }
 function expHeadsModal(){
-  const wasExp=$('#exHead'); /* opened from expense form? keep context */
   uiModal('Expense Heads',`
     <div class="field" style="display:flex;gap:8px;margin-bottom:12px"><input id="hdName" class="in" placeholder="New head, e.g. Tea, Petrol, Rent, Loading" style="flex:1"><button class="btn btn-primary" id="hdAdd">Add</button></div>
     <div class="list" id="hdList" style="border:1px solid var(--line);border-radius:10px"></div>`,null);
@@ -2655,7 +2703,7 @@ function expHeadsModal(){
   let n=0;const t=setInterval(()=>{n++;if(!$('#hdList')||n>10){clearInterval(t);return}render()},400);
 }
 
-/* ================= FEATURE 3 — Item Purchase History (sidebar tool) ================= */
+/* ========== 3) ITEM PURCHASE HISTORY ========== */
 const IH={itemId:'',label:'',limit:10,from:'',to:''};
 function vItemPurchaseHistory(){
   document.title='Item Purchase History — Munshi';
@@ -2707,278 +2755,14 @@ function renderIH(){
   qsa('#ihResults .lrow').forEach(r=>r.onclick=()=>{location.hash='#/purchases/view/'+r.dataset.pid});
 }
 
-/* ================= ROUTER + SIDEBAR INTEGRATION ================= */
+/* ========== ROUTER + SIDEBAR + COMPANY GUARD (merged, correct order) ========== */
 const UI_ROUTES={expenses:vExpenses,journals:vJournals,'purchase-history':vItemPurchaseHistory};
-function uiRoute(){
-  if(!S.me||RANK[S.me.role]<1)return false;               /* staff & above only */
-  const h=(location.hash||'').replace(/^#\/?/,'').split('?')[0];
-  if(UI_ROUTES[h]){UI_ROUTES[h]();markSide();return true}
-  return false;
-}
-function markSide(){
-  const root=(location.hash||'').replace(/^#\/?/,'').split('/')[0];
-  qsa('[data-uilink]').forEach(a=>a.classList.toggle('on',a.dataset.uilink===root));
-}
-const _route=window.route;                                  /* patch the app router */
-window.route=function(){if(uiRoute())return;return _route?_route.apply(this,arguments):undefined};
-window.addEventListener('hashchange',()=>setTimeout(()=>{uiRoute()||markSide()},0));
-/* inject sidebar links whenever the shell renders */
-function ensureSideLinks(){
-  const side=document.querySelector('.side');if(!side||side.querySelector('[data-uilink]'))return;
-  const w=document.createElement('div');
-  w.innerHTML=`<div class="sgroup">Accounts & Tools</div>
-    <a class="slink" data-uilink="expenses" href="#/expenses">${UI_SVG.exp}<span>Expenses</span></a>
-    <a class="slink" data-uilink="journals" href="#/journals">${UI_SVG.jv}<span>Journal Vouchers</span></a>
-    <a class="slink" data-uilink="purchase-history" href="#/purchase-history">${UI_SVG.hist}<span>Item Purchase History</span></a>`;
-  side.appendChild(w);markSide();
-}
-new MutationObserver(ensureSideLinks).observe(document.body,{childList:true,subtree:true});
-ensureSideLinks();
-})();
-</script>
-<script>
-/* ==================================================================
-   MUNSHI v3.9 — PROFIT BREAKDOWN (Party / Brand / Sub-category)
-   • Route: #/r/profit-breakdown  (access mirrors can.profit: admin+)
-   • Auto-injects a "Breakdown" button on your existing Profit page
-   • Cost basis: weighted avg cost (same avgCost() as Stock Valuation)
-   • Sale returns are netted as reversals (revenue & cost both minus)
-   ================================================================== */
-(function(){
-'use strict';
-
-const pbAllowed=()=>!!(S.me&&RANK[S.me.role]>=2);           /* same gate as can.profit */
-const pbHashNow=()=>{const h=(location.hash||'').replace(/^#\/?/,'').split('?')[0];
-  return h==='r/profit-breakdown'||h==='profit-breakdown'};
-
-/* ---------- tolerant resolvers (works with your item field names) ---------- */
-function pbBrandName(it){
-  if(!it)return '(deleted item)';
-  if(it.brandId){const b=brandById(it.brandId);if(b&&b.name)return b.name}
-  if(typeof it.brand==='string'&&it.brand)return it.brand;
-  if(typeof it.brandName==='string'&&it.brandName)return it.brandName;
-  return 'No brand';
-}
-function pbSubName(it){
-  if(!it)return '(deleted item)';
-  const d=it.subCategory||it.subcategory||it.subCat||it.sub;
-  if(d&&typeof d==='string')return d;
-  const sid=it.subCategoryId||it.subCatId||it.subId;
-  if(sid){const c=catById(sid);if(c&&c.name)return c.name}
-  return 'No subcategory';
-}
-const pbPartyName=id=>{const p=id?partyById(id):null;return p?p.name:'Walk-in / Counter'};
-
-/* ---------- line-level profit records in the selected period ---------- */
-function pbRecords(from,to){
-  const recs=[];
-  const inR=d=>!d.date||((!from||d.date>=from)&&(!to||d.date<=to));
-  SALES().forEach(d=>{
-    if(!inR(d))return;
-    const sub=docSub(d);
-    LINES(d).forEach(l=>{
-      const it=itemById(l.itemId);
-      const gross=(+l.qty||0)*(+l.rate||0);
-      const net=gross-((+d.discount||0)*(sub?gross/sub:0));   /* same allocation as saleLinesOf() */
-      const cost=(+l.qty||0)*avgCost(it||{id:l.itemId});
-      recs.push({partyId:d.partyId||'',it,qty:+l.qty||0,rev:net,cost,profit:net-cost});
-    });
-  });
-  SRET().forEach(d=>{
-    if(!inR(d))return;
-    LINES(d).forEach(l=>{
-      const it=itemById(l.itemId);
-      const gross=(+l.qty||0)*(+l.rate||0);
-      const cost=(+l.qty||0)*avgCost(it||{id:l.itemId});
-      recs.push({partyId:d.partyId||'',it,qty:-(+l.qty||0),rev:-gross,cost:-cost,profit:cost-gross});
-    });
-  });
-  return recs;
-}
-function pbAgg(recs,keyFn,nameFn){
-  const m=new Map();
-  recs.forEach(r=>{
-    const k=keyFn(r);
-    const g=m.get(k)||{name:nameFn(r),qty:0,rev:0,cost:0,profit:0};
-    g.qty+=r.qty;g.rev+=r.rev;g.cost+=r.cost;g.profit+=r.profit;m.set(k,g);
-  });
-  return [...m.values()].sort((a,b)=>b.profit-a.profit);
-}
-
-/* ---------- state + period presets ---------- */
-const PB={tab:'party',quick:'month',from:'',to:''};
-function pbApplyQuick(q){
-  const t=todayISO();PB.quick=q;
-  if(q==='month'){PB.from=monthStart(t);PB.to=t}
-  else if(q==='lmonth'){const last=addDays(monthStart(t),-1);PB.from=monthStart(last);PB.to=last}
-  else if(q==='d30'){PB.from=addDays(t,-29);PB.to=t}
-  else{PB.from='';PB.to=''}
-}
-const TABS=[
-  ['party','Party-wise',      r=>r.partyId||'_w',  r=>pbPartyName(r.partyId)],
-  ['brand','Brand-wise',      r=>pbBrandName(r.it),r=>pbBrandName(r.it)],
-  ['sub',  'Sub-category-wise',r=>pbSubName(r.it), r=>pbSubName(r.it)]
-];
-
-/* ---------- view ---------- */
-function vProfitBreakdown(){
-  document.title='Profit Breakdown — Munshi';
-  if(PB.quick!=='custom')pbApplyQuick(PB.quick);
-  V().innerHTML=`
-  <div class="pagehead"><div><div class="ptitle">Profit Breakdown</div>
-    <div class="psub">Party-wise · Brand-wise · Sub-category-wise — avg-cost basis, returns netted.</div></div>
-    <button class="btn btn-ghost btn-sm" id="pbCsv">⤓ CSV</button></div>
-  <div class="card cardpad" style="margin-bottom:14px">
-    <div class="lbl" style="margin-bottom:8px">Period</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="chip ${PB.quick==='month'?'on':''}" data-q="month">This Month</button>
-      <button class="chip ${PB.quick==='lmonth'?'on':''}" data-q="lmonth">Last Month</button>
-      <button class="chip ${PB.quick==='d30'?'on':''}" data-q="d30">Last 30 Days</button>
-      <button class="chip ${PB.quick==='all'?'on':''}" data-q="all">All Time</button></div>
-    <div class="rdates"><input type="date" id="pbFrom" class="in" value="${esc(PB.from)}"><span class="muted">to</span>
-      <input type="date" id="pbTo" class="in" value="${esc(PB.to)}">
-      <button class="btn btn-ghost btn-sm" id="pbGo">Apply</button></div></div>
-  <div class="kpis" id="pbKpis"></div>
-  <div class="tabs" id="pbTabs"></div>
-  <div class="card" id="pbList"></div>`;
-  qsa('[data-q]').forEach(c=>c.onclick=()=>{pbApplyQuick(c.dataset.q);vProfitBreakdown()});
-  $('#pbGo').onclick=()=>{PB.from=$('#pbFrom').value;PB.to=$('#pbTo').value;PB.quick='custom';
-    qsa('[data-q]').forEach(x=>x.classList.remove('on'));pbRender()};
-  $('#pbCsv').onclick=pbCSV;
-  pbRender();
-}
-function pbRender(){
-  const recs=pbRecords(PB.from,PB.to);
-  const T=sum(recs,r=>r.rev),C=sum(recs,r=>r.cost),P=T-C;
-  $('#pbKpis').innerHTML=`
-    <div class="kpi"><div class="lbl">Revenue (net)</div><div class="kpiV">${esc(money(T))}</div><div class="kpiD">after discounts</div></div>
-    <div class="kpi"><div class="lbl">Cost of Goods</div><div class="kpiV">${esc(money(C))}</div><div class="kpiD">avg cost</div></div>
-    <div class="kpi ${P>=0?'tint-g':'tint-r'}"><div class="lbl">Gross Profit</div><div class="kpiV">${esc(money(P))}</div><div class="kpiD">returns netted</div></div>
-    <div class="kpi"><div class="lbl">Margin</div><div class="kpiV">${T>0?(P/T*100).toFixed(1)+'%':'—'}</div><div class="kpiD">gross</div></div>`;
-  $('#pbTabs').innerHTML=TABS.map(t=>`<button class="chip ${PB.tab===t[0]?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
-  qsa('#pbTabs [data-t]').forEach(b=>b.onclick=()=>{PB.tab=b.dataset.t;pbRender()});
-  const tab=TABS.find(x=>x[0]===PB.tab)||TABS[0];
-  const rows=pbAgg(recs,tab[2],tab[3]);
-  const GC='grid-template-columns:1fr 58px 104px 108px';
-  $('#pbList').innerHTML=rows.length?
-    `<div class="list" style="padding:6px 14px 14px">
-      <div class="lgrow hdr" style="${GC}"><div>${tab[1].replace('-wise','')}</div><div class="num">Qty</div><div class="num">Revenue</div><div class="num">Profit</div></div>`+
-    rows.map(g=>{
-      const mg=g.rev>0?(g.profit/g.rev*100).toFixed(1)+'%':'—';
-      const col=g.profit<0?'var(--red)':(g.profit>0?'var(--green)':'var(--ink2)');
-      return `<div class="lgrow" style="${GC}">
-        <div class="ld"><b>${esc(g.name)}</b><span>margin ${mg}${g.profit<0?' · LOSS':''}</span></div>
-        <div class="num">${g.qty}</div>
-        <div class="num">${esc(money(g.rev))}</div>
-        <div class="num" style="color:${col};font-weight:700">${esc(money(g.profit))}</div></div>`}).join('')+
-    `<div class="lgrow" style="${GC};border-top:2px solid var(--ink)">
-        <div class="ld"><b>Total</b></div><div class="num"></div>
-        <div class="num"><b>${esc(money(T))}</b></div>
-        <div class="num" style="color:${P<0?'var(--red)':'var(--green)'}"><b>${esc(money(P))}</b></div></div></div>`
-   :`<div class="empty"><div class="big">No sales in this period</div>Widen the period or check another tab.</div>`;
-}
-function pbCSV(){
-  const tab=TABS.find(x=>x[0]===PB.tab)||TABS[0];
-  const rows=pbAgg(pbRecords(PB.from,PB.to),tab[2],tab[3]);
-  const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
-  const csv=['Name,Qty,Revenue,Cost,Profit,Margin%'].concat(rows.map(g=>
-    [q(g.name),g.qty,g.rev.toFixed(2),g.cost.toFixed(2),g.profit.toFixed(2),g.rev?(g.profit/g.rev*100).toFixed(1):0].join(','))).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='profit-'+PB.tab+'-'+(PB.from||'all')+'_'+(PB.to||'all')+'.csv';a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-}
-<script>
-/* ==================================================================
-   MUNSHI v3.10 — BRAND-SCOPED COMPANY USER (fixes mobile data leak)
-   • Company user's `state` now contains ONLY their allocated brand's
-     docs → every view (desktop AND mobile) shows correct data
-   • Route guard: company user can only open allowed pages
-   • Nav links to blocked pages are hidden on mobile + desktop
-   ================================================================== */
-(function(){
-'use strict';
-try{
-
-/* ---------------- CONFIG — adjust here ---------------- */
-const COMPANY_CFG={
-  /* field on the USER doc (Firestore → users → this user) that holds the brand allocation.
-     Tried in this order — keep whichever exists, delete the rest: */
-  brandField:['brandId','brand','brandName'],
-  /* route prefixes this user may open (your requirement: stock, sales, collections) */
-  allowedRoutes:['r/stock','sales','collections'],
-  homeRoute:'r/stock',
-  /* Purchase/return docs of their brand are kept so Stock Valuation math is correct
-     (stock = opening + purchases − sales). Set false to hide them from data too,
-     but stock figures will then be wrong. Nav links are hidden regardless. */
-  includePurchaseDocs:true
-};
-/* ------------------------------------------------------ */
-
-const isCompany=()=>!!(S.me&&S.me.role==='company');
-function myBrandId(){
-  if(!isCompany())return null;
-  for(const f of COMPANY_CFG.brandField){if(S.me[f])return String(S.me[f])}
-  if(Array.isArray(S.me.brands)&&S.me.brands.length)return String(S.me.brands[0]);
-  return null;
-}
-function itemBrandKey(it){
-  if(!it)return '';
-  if(it.brandId)return String(it.brandId);
-  if(it.brand)return String(it.brand);
-  if(it.brandName)return String(it.brandName);
-  return '';
-}
-
-/* raw unfiltered docs kept privately; state gets only the filtered slice */
-const RAW={};
-let warned=false;
-function recomputeCompany(){
-  const bid=myBrandId();
-  if(!bid){
-    if(!warned){warned=true;console.warn('v3.10: company user has no brand field — nothing shown. Check COMPANY_CFG.brandField vs the user doc in Firestore.')}
-    ['items','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(c=>state[c]=[]);
-    return;
-  }
-  const allItems=RAW.items||[];
-  const items=allItems.filter(it=>itemBrandKey(it)===bid);
-  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&itemBrandKey(it)===bid};
-  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId));   /* mixed-brand invoices are excluded */
-  state.items=items;
-  state.brands=(RAW.brands||[]).filter(b=>b.id===bid);
-  state.categories=RAW.categories||[];               /* labels only — contains no sales data */
-  state.sales=(RAW.sales||[]).filter(linesOk);
-  state.saleReturns=(RAW.saleReturns||[]).filter(linesOk);
-  state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
-  state.purchaseReturns=COMPANY_CFG.includePurchaseDocs?(RAW.purchaseReturns||[]).filter(linesOk):[];
-  state.stockAdj=(RAW.stockAdj||[]).filter(a=>a&&itemOk(a.itemId));
-  /* collections = receipts from parties who bought this brand */
-  const partyIds=new Set(state.sales.map(s=>s.partyId).filter(Boolean));
-  state.receipts=(RAW.receipts||[]).filter(r=>r.partyId&&partyIds.has(r.partyId));
-  /* everything else the company user must never see */
-  state.payments=[];state.parties=[];state.orders=[];state.users=[];
-}
-
-function subscribeCompany(){
-  const COLS=['items','categories','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'];
-  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
-    RAW[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
-    recomputeCompany();onLive();
-  },err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
-  COLS.forEach(sub);
-  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
-  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
-}
-
-/* wrap subscribeAll: company users get the scoped subscription, everyone else unchanged */
-const _sa=window.subscribeAll;
-window.subscribeAll=function(me){
-  if(me&&me.role==='company'){subscribeCompany();return}
-  return _sa?_sa.apply(this,arguments):undefined;
-};
-
-/* route guard + nav hiding */
 const hashNow=()=>(location.hash||'').replace(/^#\/?/,'').split('?')[0];
-const allowed=h=>!h||COMPANY_CFG.allowedRoutes.some(p=>h===p||h.indexOf(p+'/')===0);
+function allowed(h){
+  if(!h)return true;
+  if(/^(login|logout)/.test(h))return true;              /* never trap the user */
+  return COMPANY_CFG.allowedRoutes.some(p=>h===p||h.indexOf(p+'/')===0);
+}
 function companyGuard(){
   if(!isCompany())return false;
   const h=hashNow();
@@ -2986,20 +2770,48 @@ function companyGuard(){
   if(!allowed(h)){location.hash='#/'+COMPANY_CFG.homeRoute;toast('Your login is limited to your brand','err');return true}
   return false;
 }
-const _r10=window.route;
-window.route=function(){if(companyGuard())return;return _r10?_r10.apply(this,arguments):undefined};
-window.addEventListener('hashchange',()=>setTimeout(()=>{try{companyGuard()}catch(e){}},0));
+function uiRoute(){
+  if(!S.me||RANK[S.me.role]<1||isCompany())return false; /* company users are guarded above */
+  const h=hashNow();
+  if(UI_ROUTES[h]){UI_ROUTES[h]();markSide();return true}
+  return false;
+}
+function markSide(){
+  const root=hashNow().split('/')[0];
+  qsa('[data-uilink]').forEach(a=>a.classList.toggle('on',a.dataset.uilink===root));
+}
+function ensureSideLinks(){
+  const side=document.querySelector('.side');
+  if(!side||!S.me||RANK[S.me.role]<1||isCompany())return;
+  if(side.querySelector('[data-uilink]'))return;
+  const w=document.createElement('div');
+  w.innerHTML=`<div class="sgroup">Accounts & Tools</div>
+    <a class="slink" data-uilink="expenses" href="#/expenses">${UI_SVG.exp}<span>Expenses</span></a>
+    <a class="slink" data-uilink="journals" href="#/journals">${UI_SVG.jv}<span>Journal Vouchers</span></a>
+    <a class="slink" data-uilink="purchase-history" href="#/purchase-history">${UI_SVG.hist}<span>Item Purchase History</span></a>`;
+  side.appendChild(w);markSide();
+}
 function hideBlockedNav(){
   if(!isCompany())return;
   qsa('a[href^="#/"]').forEach(el=>{
     const h=(el.getAttribute('href')||'').replace(/^#\/?/,'').split('?')[0];
-    if(h&&!allowed(h))el.style.display='none';
+    if(!allowed(h))el.style.display='none';
   });
 }
-new MutationObserver(()=>{try{hideBlockedNav()}catch(e){}}).observe(document.body,{childList:true,subtree:true});
-hideBlockedNav();
+new MutationObserver(()=>{try{ensureSideLinks();hideBlockedNav()}catch(e){}})
+  .observe(document.body,{childList:true,subtree:true});
+try{ensureSideLinks();hideBlockedNav()}catch(e){}
+const _routeOrig=window.route;
+window.route=function(){
+  try{if(companyGuard())return}catch(e){}
+  try{if(uiRoute())return}catch(e){}
+  return _routeOrig?_routeOrig.apply(this,arguments):undefined;
+};
+window.addEventListener('hashchange',()=>setTimeout(()=>{
+  try{companyGuard()}catch(e){} try{markSide()}catch(e){}
+},0));
 
-}catch(err){console.error('v3.10 brand-scope failed:',err)}
+}catch(err){console.error('Munshi upgrade layer failed:',err)}
 })();
 </script>
 </body>
