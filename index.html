@@ -2340,11 +2340,10 @@ window.closeModal=closeModal;
 </script>
 <script>
 /* ==================================================================
-   MUNSHI CONSOLIDATED UPGRADE LAYER (replaces v3.8 + v3.9 + v3.10)
-   1 Add-a-Row focus (click + Tab)   2 Last-purchase-price hints
-   3 Item Purchase History page      4 Expenses + custom Heads
-   5 Journal Vouchers (party-to-party) in ledgers
-   6 Brand-scoped company user (fixes mobile data leak)
+   MUNSHI UPGRADE LAYER v3.11 — single block, replaces everything prior
+   Fixes: company brand match (brandIds ARRAY, multi-brand) · company
+   users get Expenses/Journal/Purchase-History · routes no longer bounce
+   Keeps: row-focus · last-purchase hints · expenses · journals · history
    ================================================================== */
 (function(){
 'use strict';
@@ -2352,10 +2351,9 @@ try{
 
 /* ============ CONFIG ============ */
 const COMPANY_CFG={
-  brandField:['brandId','brand','brandName'],  /* field on the company USER doc holding the brand */
-  allowedRoutes:['r/stock','sales','collections'],
+  allowedRoutes:['r/stock','sales','collections','purchases','expenses','journals','purchase-history'],
   homeRoute:'r/stock',
-  includePurchaseDocs:true   /* brand purchases kept so Stock Valuation math stays correct */
+  includePurchaseDocs:true   /* brand purchases kept → Stock Valuation math correct */
 };
 const AUTO_LAST_RATE_ON_PURCHASE=true;
 /* ================================ */
@@ -2387,13 +2385,16 @@ document.addEventListener('keydown',e=>{
 ['expenses','expenseHeads','journals'].forEach(k=>{if(!COLLECTION_KEYS.includes(k))COLLECTION_KEYS.push(k)});
 state.expenses=state.expenses||[];state.expenseHeads=state.expenseHeads||[];state.journals=state.journals||[];
 
-/* ========== 6) BRAND-SCOPED COMPANY USER (fixed: parties kept, logout never hidden) ========== */
+/* ========== BRAND-SCOPED COMPANY USER (reads brandIds ARRAY — the fix) ========== */
 const isCompany=()=>!!(S.me&&S.me.role==='company');
-function myBrandId(){
-  if(!isCompany())return null;
-  for(const f of COMPANY_CFG.brandField){if(S.me[f])return String(S.me[f])}
-  if(Array.isArray(S.me.brands)&&S.me.brands.length)return String(S.me.brands[0]);
-  return null;
+function myBrandIds(){
+  if(!isCompany())return [];
+  /* your allocation modal saves brandIds + assignedBrandIds ARRAYS — check those FIRST */
+  for(const f of ['brandIds','assignedBrandIds','brands']){
+    if(Array.isArray(S.me[f])&&S.me[f].length)return S.me[f].map(x=>String(x)).filter(Boolean);
+  }
+  for(const f of ['brandId','brand','brandName']){if(S.me[f])return [String(S.me[f])]}
+  return [];
 }
 function itemBrandKey(it){
   if(!it)return '';
@@ -2404,20 +2405,21 @@ function itemBrandKey(it){
 }
 const RAW={};let noBrandWarned=false;
 function recomputeCompany(){
-  const bid=myBrandId();
-  if(!bid){
+  const bids=myBrandIds();
+  const set=new Set(bids);
+  if(!bids.length){
     if(!noBrandWarned){noBrandWarned=true;
-      console.warn('UPGRADE: company user has no brand field — nothing shown. Check COMPANY_CFG.brandField vs the user doc.')}
-    ['items','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(c=>state[c]=[]);
+      console.warn('UPGRADE: company user has NO brand allocation. Admin → Users → Allocate brands, then this user re-opens the app.')}
+    ['items','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj','expenses','expenseHeads','journals'].forEach(c=>state[c]=[]);
     return;
   }
   const allItems=RAW.items||[];
-  const items=allItems.filter(it=>itemBrandKey(it)===bid);
-  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&itemBrandKey(it)===bid};
-  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId)); /* mixed-brand invoices excluded */
+  const items=allItems.filter(it=>set.has(itemBrandKey(it)));
+  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&set.has(itemBrandKey(it))};
+  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId));
   state.items=items;
-  state.brands=(RAW.brands||[]).filter(b=>b.id===bid);
-  state.categories=RAW.categories||[];              /* labels only — no sales data */
+  state.brands=(RAW.brands||[]).filter(b=>set.has(b.id));
+  state.categories=RAW.categories||[];
   state.sales=(RAW.sales||[]).filter(linesOk);
   state.saleReturns=(RAW.saleReturns||[]).filter(linesOk);
   state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
@@ -2428,15 +2430,20 @@ function recomputeCompany(){
   state.saleReturns.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
   state.receipts=(RAW.receipts||[]).filter(r=>r.partyId&&partyIds.has(r.partyId));
   state.parties=(RAW.parties||[]).filter(p=>partyIds.has(p.id));
+  state.expenses=RAW.expenses||[];state.expenseHeads=RAW.expenseHeads||[];state.journals=RAW.journals||[];
   state.payments=[];state.orders=[];state.users=[];
 }
 function subscribeCompany(){
-  const COLS=['items','categories','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'];
+  const COLS=['items','categories','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj','expenses','expenseHeads','journals'];
   const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
     RAW[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
     recomputeCompany();onLive();
   },err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
   COLS.forEach(sub);
+  /* live allocation: if admin changes this user's brands, state refilters without re-login */
+  if(S.me&&S.me.id){S.unsubs.push(DB.collection('users').doc(S.me.id).onSnapshot(s=>{
+    if(s.exists){S.me=Object.assign({},S.me,s.data());recomputeCompany();onLive()}
+  },err=>{if(err.code!=='permission-denied')console.error('users/me',err)}))}
   S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
   S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
 }
@@ -2446,7 +2453,7 @@ window.subscribeAll=function(me){
   return _subscribeAllOrig?_subscribeAllOrig.apply(this,arguments):undefined;
 };
 
-/* ========== 2) LAST PURCHASE PRICE ========== */
+/* ========== LAST PURCHASE PRICE ========== */
 function lastPurchasesOf(itemId,limit){
   const rows=[];
   PURCHASES().forEach(d=>LINES(d).forEach(l=>{
@@ -2505,7 +2512,7 @@ window.attachCombo=function(input,opts){
   return _attachComboOrig(input,wrapped);
 };
 
-/* ========== 1) ADD-A-ROW FOCUS ========== */
+/* ========== ADD-A-ROW FOCUS ========== */
 function findAddRowBtn(){
   return [...document.querySelectorAll('button,.chip,a.btn')].find(el=>{
     const t=(el.textContent||'').trim();
@@ -2533,7 +2540,7 @@ document.addEventListener('keydown',e=>{
   e.preventDefault();btn.click();doubleRaf(focusLastLineInput);
 });
 
-/* ========== 5) JOURNAL VOUCHERS ========== */
+/* ========== JOURNAL VOUCHERS ========== */
 const JV=()=>state.journals||[];
 const _partyEntriesOrig=window.partyEntries;
 window.partyEntries=function(pid){
@@ -2594,7 +2601,7 @@ function jrForm(id){
   };
 }
 
-/* ========== 4) EXPENSES ========== */
+/* ========== EXPENSES ========== */
 const EXP_MODES=['Cash','Bank','UPI','Card','Cheque','Other'];
 const HEADS=()=>state.expenseHeads||[],EXPENSES=()=>state.expenses||[];
 const headById=id=>HEADS().find(h=>h.id===id);
@@ -2700,7 +2707,7 @@ function expHeadsModal(){
   let n=0;const t=setInterval(()=>{n++;if(!$('#hdList')||n>10){clearInterval(t);return}render()},400);
 }
 
-/* ========== 3) ITEM PURCHASE HISTORY ========== */
+/* ========== ITEM PURCHASE HISTORY ========== */
 const IH={itemId:'',label:'',limit:10,from:'',to:''};
 function vItemPurchaseHistory(){
   document.title='Item Purchase History — Munshi';
@@ -2752,12 +2759,12 @@ function renderIH(){
   qsa('#ihResults .lrow').forEach(r=>r.onclick=()=>{location.hash='#/purchases/view/'+r.dataset.pid});
 }
 
-/* ========== ROUTER + SIDEBAR + COMPANY GUARD (merged, correct order) ========== */
+/* ========== ROUTER + SIDEBAR + GUARD (company CAN use the tool pages now) ========== */
 const UI_ROUTES={expenses:vExpenses,journals:vJournals,'purchase-history':vItemPurchaseHistory};
 const hashNow=()=>(location.hash||'').replace(/^#\/?/,'').split('?')[0];
 function allowed(h){
   if(!h)return true;
-  if(/^(login|logout)/.test(h))return true;              /* never trap the user */
+  if(/^(login|logout)/.test(h))return true;
   return COMPANY_CFG.allowedRoutes.some(p=>h===p||h.indexOf(p+'/')===0);
 }
 function companyGuard(){
@@ -2768,7 +2775,7 @@ function companyGuard(){
   return false;
 }
 function uiRoute(){
-  if(!S.me||RANK[S.me.role]<1||isCompany())return false;
+  if(!S.me||RANK[S.me.role]<1)return false;   /* staff, company, admin, super — all served */
   const h=hashNow();
   if(UI_ROUTES[h]){UI_ROUTES[h]();markSide();return true}
   return false;
@@ -2779,7 +2786,7 @@ function markSide(){
 }
 function ensureSideLinks(){
   const side=document.querySelector('.side');
-  if(!side||!S.me||RANK[S.me.role]<1||isCompany())return;
+  if(!side||!S.me||RANK[S.me.role]<1)return;
   if(side.querySelector('[data-uilink]'))return;
   const w=document.createElement('div');
   w.innerHTML=`<div class="sgroup">Accounts & Tools</div>
