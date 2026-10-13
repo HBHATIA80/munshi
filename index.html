@@ -1784,24 +1784,32 @@ function vReportPayment(){setTop('Payment Analysis');setActiveNav('r/payment');S
   <div class="card cardpad">${body}</div>`;
   bindRange(key);bindTabs(key)};
  draw()}
-function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.report.profit=S.report.profit||{preset:'month',tab:'date',...mk(presetRange('month'))};
- const key='profit';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
+function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');
+ S.report.profit=S.report.profit||{preset:'month',tab:'date',...mk(presetRange('month'))};
+ const key='profit';const draw=()=>{
+  const r=S.report[key],f=r.from,t=r.to;
   const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
   const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
   let rev=0,cogs=0;const rows=[];
   const push=(dimK,net,cost)=>{let row=rows.find(x=>x.k===dimK);if(!row){row={k:dimK,rev:0,cogs:0};rows.push(row)}row.rev+=net;row.cogs+=cost};
-  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0)),c=(+l.qty||0)*AC(l.itemId);rev+=net;cogs+=c;push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c)})});
-  rets.forEach(rt=>{LINES(rt).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=(+l.qty||0)*(+l.rate||0),c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=net;cogs-=c;push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c)})});
+  const brandOf=it=>{if(!it)return 'No brand';if(it.brandId){const b=brandById(it.brandId);if(b&&b.name)return b.name}return it.brand||it.brandName||'No brand'};
+  const subOf=it=>{if(!it)return 'No subcategory';const v=it.subCategory||it.subcategory||it.subCat||it.sub;if(v)return v;if(it.subCategoryId){const c=catById(it.subCategoryId);if(c&&c.name)return c.name}return 'No subcategory'};
+  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0)),c=(+l.qty||0)*AC(l.itemId);rev+=net;cogs+=c;
+   push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c);
+   push('p:'+(d.partyId||'—'),net,c);push('b:'+brandOf(it),net,c);push('s:'+subOf(it),net,c)})});
+  rets.forEach(rt=>{LINES(rt).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=(+l.qty||0)*(+l.rate||0),c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=net;cogs-=c;
+   push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c);
+   push('p:'+(rt.partyId||'—'),-net,-c);push('b:'+brandOf(it),-net,-c);push('s:'+subOf(it),-net,-c)})});
   const profit=rev-cogs,margin=rev>0?profit/rev*100:0;
-  const label=k=>k.startsWith('d:')?fmtDate(k.slice(2)):k.startsWith('i:')?(itemById(k.slice(2))?.name||'—'):(catById(k.slice(2))?.name||'—');
-  let body='';const tab=r.tab,pre={date:'d:',item:'i:',category:'c:'}[tab];
+  const label=k=>k.startsWith('d:')?fmtDate(k.slice(2)):k.startsWith('i:')?(itemById(k.slice(2))?.name||'—'):k.startsWith('c:')?(catById(k.slice(2))?.name||'—'):k.startsWith('p:')?(partyById(k.slice(2))?.name||'Walk-in / Counter'):k.slice(2);
+  let body='';const tab=r.tab,pre={date:'d:',item:'i:',category:'c:',party:'p:',brand:'b:',subcat:'s:'}[tab];
   const arr=rows.filter(x=>x.k.startsWith(pre)).sort((a,b)=>(b.rev-b.cogs)-(a.rev-a.cogs));
   const mx=Math.max(1,...arr.map(x=>Math.abs(x.rev-x.cogs)));
   body=arr.length?arr.map(x=>{const pr=x.rev-x.cogs;return `<div class="brow"><div><span class="bname">${esc(label(x.k))}</span><span class="bsub">rev ${money(x.rev)} · cogs ${money(x.cogs)}</span></div><div class="btrack"><i style="width:${Math.abs(pr)/mx*100}%;background:${pr>=0?'var(--green)':'var(--red)'}"></i></div><div class="bv" style="color:${pr>=0?'var(--green)':'var(--red)'}">${money(pr)}</div></div>`}).join(''):emptyHtml('chart','No sales in this period');
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Profit Analysis</div><div class="psub">Gross margin on weighted-average cost · ${fmtDate(f)} → ${fmtDate(t)}</div></div></div>
   ${rangeBar(key)}
   <div class="sumrow">${sumTile('Net revenue',money(rev))}${sumTile('Cost of goods',money(cogs))}${sumTile('Gross profit',money(profit),profit>=0?'var(--green)':'var(--red)')}${sumTile('Margin',margin.toFixed(1)+'%',margin>=0?'var(--green)':'var(--red)')}</div>
-  ${tabsHtml(key,r.tab,[['date','Date-wise'],['item','Item-wise'],['category','Category-wise']])}
+  ${tabsHtml(key,r.tab,[['date','Date-wise'],['item','Item-wise'],['category','Category-wise'],['party','Party-wise'],['brand','Brand-wise'],['subcat','Sub-category-wise']])}
   <div class="card cardpad">${body}</div>
   <p class="muted" style="font-size:12px;margin-top:10px">Credit-only returns reduce revenue without returning stock; cash operating expenses and overheads are not included — this is trading gross profit.</p>`;
   bindRange(key);bindTabs(key)};
@@ -2880,37 +2888,5 @@ function pbCSV(){
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
 
-/* ---------- integration: router, sidebar, button on existing Profit page ---------- */
-const _pbPrev=window.route;
-window.route=function(){
-  if(pbAllowed()&&pbHashNow()){vProfitBreakdown();pbMark();return}
-  return _pbPrev?_pbPrev.apply(this,arguments):undefined;
-};
-window.addEventListener('hashchange',()=>setTimeout(()=>{if(pbAllowed()&&pbHashNow())vProfitBreakdown();pbMark()},0));
-function pbMark(){const a=document.querySelector('.side [data-uilink="r/profit-breakdown"]');if(a)a.classList.toggle('on',pbHashNow())}
-function pbSideLink(){
-  const side=document.querySelector('.side');if(!side||side.querySelector('[data-uilink="r/profit-breakdown"]'))return;
-  const a=document.createElement('a');a.className='slink';a.dataset.uilink='r/profit-breakdown';a.href='#/r/profit-breakdown';
-  a.innerHTML='<svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19.5h16"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-8"/></svg><span>Profit Breakdown</span>';
-  const after=side.querySelector('[data-uilink="purchase-history"]');
-  if(after&&after.parentElement)after.insertAdjacentElement('afterend',a);else side.appendChild(a);
-  pbMark();
-}
-new MutationObserver(pbSideLink).observe(document.body,{childList:true,subtree:true});
-pbSideLink();
-/* inject a "Breakdown" button onto your existing Profit Analysis page */
-function pbInjectButton(){
-  if(!pbAllowed()||pbHashNow())return;
-  const t=document.querySelector('#view .ptitle');
-  if(!t||!/profit/i.test(t.textContent||''))return;
-  if(document.getElementById('pbGoBtn'))return;
-  const b=document.createElement('button');b.id='pbGoBtn';b.className='btn btn-ghost btn-sm';
-  b.textContent='Breakdown: Party / Brand / Sub-category';
-  b.onclick=()=>{location.hash='#/r/profit-breakdown'};
-  (t.closest('.pagehead')||t.parentElement).appendChild(b);
-}
-new MutationObserver(pbInjectButton).observe(document.body,{childList:true,subtree:true});
-})();
-</script>
 </body>
 </html>
