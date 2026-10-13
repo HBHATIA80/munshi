@@ -1813,9 +1813,7 @@ function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');
   <div class="card cardpad">${body}</div>
   <p class="muted" style="font-size:12px;margin-top:10px">Credit-only returns reduce revenue without returning stock; cash operating expenses and overheads are not included — this is trading gross profit.</p>`;
   bindRange(key);bindTabs(key)};
- draw()}
-
-function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
+ draw()}function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
  let q='',f='all',page=1,size=50;
  const draw=()=>{const os=ORDERS().slice().sort((a,b)=>(b.created||0)-(a.created||0));
   const counts={all:os.length};os.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);
@@ -2389,7 +2387,7 @@ document.addEventListener('keydown',e=>{
 ['expenses','expenseHeads','journals'].forEach(k=>{if(!COLLECTION_KEYS.includes(k))COLLECTION_KEYS.push(k)});
 state.expenses=state.expenses||[];state.expenseHeads=state.expenseHeads||[];state.journals=state.journals||[];
 
-/* ========== 6) BRAND-SCOPED COMPANY USER (v3.10.1 — fixed) ========== */
+/* ========== 6) BRAND-SCOPED COMPANY USER (fixed: parties kept, logout never hidden) ========== */
 const isCompany=()=>!!(S.me&&S.me.role==='company');
 function myBrandId(){
   if(!isCompany())return null;
@@ -2425,7 +2423,6 @@ function recomputeCompany(){
   state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
   state.purchaseReturns=COMPANY_CFG.includePurchaseDocs?(RAW.purchaseReturns||[]).filter(linesOk):[];
   state.stockAdj=(RAW.stockAdj||[]).filter(a=>a&&itemOk(a.itemId));
-  /* keep only parties connected to this brand → names render, nothing else leaks */
   const partyIds=new Set();
   state.sales.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
   state.saleReturns.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
@@ -2445,7 +2442,7 @@ function subscribeCompany(){
 }
 const _subscribeAllOrig=window.subscribeAll;
 window.subscribeAll=function(me){
-  if(me&&me.role==='company'){subscribeCompany();return}   /* scoped; staff/admin/super unchanged via COLLECTION_KEYS */
+  if(me&&me.role==='company'){subscribeCompany();return}
   return _subscribeAllOrig?_subscribeAllOrig.apply(this,arguments):undefined;
 };
 
@@ -2771,7 +2768,7 @@ function companyGuard(){
   return false;
 }
 function uiRoute(){
-  if(!S.me||RANK[S.me.role]<1||isCompany())return false; /* company users are guarded above */
+  if(!S.me||RANK[S.me.role]<1||isCompany())return false;
   const h=hashNow();
   if(UI_ROUTES[h]){UI_ROUTES[h]();markSide();return true}
   return false;
