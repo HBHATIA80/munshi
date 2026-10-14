@@ -1961,7 +1961,9 @@ function vOrders(){setTop('Online Orders');setActiveNav('orders');S.draftOrder=n
   qsa('.lrow[data-id]').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
  draw()}
 function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
- const draw=()=>{const items=ITEMS().filter(i=>!q||((i.name||'')+' '+(i.sku||'')+' '+(brandById(i.brandId)?.name||'')).toLowerCase().includes(q))).filter(i=>cf==='all'||i.categoryId===cf||SUBCATS(cf).some(s=>s.id===i.categoryId));
+ 
+const draw=()=>{const items=ITEMS().filter(i=>!q||((i.name||'')+' '+(i.sku||'')+' '+(brandById(i.brandId)?.name||'')).toLowerCase().includes(q)).filter(i=>cf==='all'||i.categoryId===cf||SUBCATS(cf).some(s=>s.id===i.categoryId));
+
   V().innerHTML=`
   <div class="pagehead"><div><span class="lbl">${esc(SET().businessName)} · wholesale</span><div class="ptitle">Shop</div><div class="psub">Pick accessories and place an order — we confirm and deliver.</div></div></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="sq" placeholder="Search products…" value="${esc(q)}"></div>
