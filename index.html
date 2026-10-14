@@ -1309,8 +1309,8 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
  <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge ${p.active===false?'b-red':'b-green'}">${p.active===false?'Billing blocked':'Active'}</span><button class="btn btn-ghost" id="pdEdit">${ic('edit',16)}Edit</button>
  <button class="btn btn-ghost" id="pdToggle">${ic(p.active===false?'check':'x',16)}${p.active===false?'Reactivate':'Block billing'}</button>
  <button class="btn btn-danger" id="pdDelete">${ic('trash',16)}Delete</button>
- ${bal>0.004?`<a class="btn btn-primary" href="#/collections/new/${id}">${ic('down',16)}Receive</a>`:''}
- ${bal<-0.004?`<a class="btn btn-primary" href="#/payments/new/${id}">${ic('up',16)}Pay</a>`:''}</div></div>
+ <a class="btn btn-primary" href="#/collections/new/${id}">${ic('down',16)}Receipts</a>
+ <a class="btn btn-primary" href="#/payments/new/${id}">${ic('up',16)}Payments</a></div></div>
  <div class="sumrow" style="grid-template-columns:repeat(3,1fr)">
   <div class="sum"><span class="lbl">Balance</span><b style="color:${bal>0.004?'var(--green)':bal<-0.004?'var(--red)':'var(--ink)'}">${money(Math.abs(bal))} ${Math.abs(bal)<0.004?'':bal>0?'Dr':'Cr'}</b></div>
   <div class="sum"><span class="lbl">Sales to date</span><b>${money(sum(SALES().filter(d=>d.partyId===id),d=>d.total))}</b></div>
