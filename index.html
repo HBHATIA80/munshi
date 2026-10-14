@@ -311,6 +311,12 @@ body.locked{overflow:hidden}
 .ptot .tr{display:flex;justify-content:space-between;padding:4px 0}
 .ptot .g{border-top:2px solid #111;font-weight:700;font-size:15px}
 .pwords{margin-top:14px;font-size:12.5px;border:1px dashed #999;padding:9px 11px;border-radius:6px}
+
+/* Desktop keyboard shortcut hints */
+.keyhint{margin-left:auto;padding:2px 5px;border:1px solid rgba(120,130,120,.28);border-radius:5px;font:600 10px var(--mono);line-height:1.4;color:var(--ink2);background:rgba(255,255,255,.55);white-space:nowrap}
+.slink{display:flex;align-items:center;gap:9px}
+.slink:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+@media(max-width:760px){.keyhint{display:none}}
 </style>
 </head>
 <body>
@@ -626,23 +632,12 @@ function openForgotModal(){openModal(`<div class="mhead"><h3>Reset password requ
  <form id="fgForm"><div class="field"><label class="fl">Registered mobile number</label><input class="in" id="fg-mob" inputmode="numeric" required placeholder="10-digit mobile"></div>
  <div id="fgErr" class="notice red" style="display:none"></div>
  <button class="btn btn-primary" style="width:100%">Send request to admin</button></form></div>`);
- $('#fgForm').onsubmit=async e=>{e.preventDefault();const m=normMobile($('#fg-mob').value),btn=$('#fgForm button[type=submit]')||$('#fgForm button');
-  const err=$('#fgErr');
-  if(!validMobile(m)){err.style.display='flex';err.innerHTML=ic('alert',15)+'<span>Enter a valid registered 10-digit mobile number.</span>';return}
-  if(btn){btn.disabled=true;btn.textContent='Sending request…'}
-  try{
-   // Signed-out users must not read pwResets or logins. Firestore rules validate
-   // that the corresponding logins/{mobile} document exists before accepting this create.
-   await DB.collection('pwResets').add({mobile:m,status:'pending',created:Date.now()});
-   closeModal();toast('Request sent to admin. Please wait for verification.');
-  }catch(ex){
-   console.error('Password reset request failed:',ex);
-   err.style.display='flex';
-   const msg=ex&&ex.code==='permission-denied'?'Firebase denied this request. Ask the admin to publish the pwResets Firestore rule.':'Could not send request. Check your connection and try again.';
-   err.innerHTML=ic('alert',15)+'<span>'+esc(msg)+'</span>';
-   if(btn){btn.disabled=false;btn.textContent='Send request to admin'}
-  }
- }}
+ $('#fgForm').onsubmit=async e=>{e.preventDefault();const m=normMobile($('#fg-mob').value);
+  let exists=false;try{exists=(await DB.collection('logins').doc(m).get()).exists}catch(ex){}
+  if(!exists){const n=$('#fgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>No account found with this mobile number.</span>';return}
+  try{await DB.collection('pwResets').add({mobile,status:'pending',created:Date.now()});
+   closeModal();toast('Request sent — ask your admin for the new password')}
+  catch(ex){closeModal();toast('Request already pending or failed','err')}}}
 function renderRegister(){
  authShell(`<div class="card cardpad">
    <span class="lbl">New customer registration</span>
@@ -810,8 +805,9 @@ function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openMod
 function renderShell(){
  const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
  const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
- const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="margin-left:auto;display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="margin-left:auto;display:none">0</span>`:'';
-  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}">${ic(it[2],17)}${it[1]}${b}</a>`};
+ const shortcutMap={'dash':'Alt+D','sales':'Alt+S','purchases':'Alt+P','sale-returns':'Alt+R','purchase-returns':'Alt+U','collections':'Alt+C','payments':'Alt+Y','parties':'Alt+A','items':'Alt+I','orders':'Alt+O'};
+ const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:'';const k=shortcutMap[it[0]]?`<kbd class="keyhint">${shortcutMap[it[0]]}</kbd>`:'';
+  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}" title="${it[1]}${shortcutMap[it[0]]?' · '+shortcutMap[it[0]]:''}">${ic(it[2],17)}<span>${it[1]}</span>${k}${b}</a>`};
  $('#app').innerHTML=`
  <aside class="side">
    <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
@@ -1208,9 +1204,6 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  $('#docForm').onsubmit=async e=>{e.preventDefault();const sb=$('#docSaveBtn');sb.disabled=true;
   try{
    if(!st.partyId){toast('Select a party — type in the search box and pick','err');return}
-   const selectedParty=partyById(st.partyId);
-   if(!selectedParty){toast('Selected party no longer exists. Please select again.','err');return}
-   if(!ed&&selectedParty.active===false&&['sale','purchase'].includes(type)){toast('Billing is blocked for this party. Reactivate it from Party details first.','err');return}
    const lines=st.lines.filter(l=>l.itemId&&l.qty>0);
    if(!lines.length){toast('Add at least one item with quantity','err');return}
    if(lines.some(l=>!(+l.rate>=0))){toast('Rates must be 0 or more','err');return}
@@ -1306,11 +1299,9 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
  setActiveNav('parties');const bal=partyBalance(id),es=partyEntries(id);let run=0;
  V().innerHTML=`
  <div class="pagehead"><div><span class="lbl">${esc(p.type)}</span><div class="ptitle">${esc(p.name)}</div><div class="psub">${esc(p.phone||'')}${p.address?' · '+esc(p.address):''}</div></div>
- <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge ${p.active===false?'b-red':'b-green'}">${p.active===false?'Billing blocked':'Active'}</span><button class="btn btn-ghost" id="pdEdit">${ic('edit',16)}Edit</button>
- <button class="btn btn-ghost" id="pdToggle">${ic(p.active===false?'check':'x',16)}${p.active===false?'Reactivate':'Block billing'}</button>
- <button class="btn btn-danger" id="pdDelete">${ic('trash',16)}Delete</button>
- <a class="btn btn-primary" href="#/collections/new/${id}">${ic('down',16)}Receipts</a>
- <a class="btn btn-primary" href="#/payments/new/${id}">${ic('up',16)}Payments</a></div></div>
+ <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="pdEdit">${ic('edit',16)}Edit</button>
+ ${bal>0.004?`<a class="btn btn-primary" href="#/collections/new/${id}">${ic('down',16)}Receive</a>`:''}
+ ${bal<-0.004?`<a class="btn btn-primary" href="#/payments/new/${id}">${ic('up',16)}Pay</a>`:''}</div></div>
  <div class="sumrow" style="grid-template-columns:repeat(3,1fr)">
   <div class="sum"><span class="lbl">Balance</span><b style="color:${bal>0.004?'var(--green)':bal<-0.004?'var(--red)':'var(--ink)'}">${money(Math.abs(bal))} ${Math.abs(bal)<0.004?'':bal>0?'Dr':'Cr'}</b></div>
   <div class="sum"><span class="lbl">Sales to date</span><b>${money(sum(SALES().filter(d=>d.partyId===id),d=>d.total))}</b></div>
@@ -1320,15 +1311,7 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
   ${es.length?es.map(e=>{run+=e.dr-e.cr;return `<div class="lgrow" ${e.link?`data-go="${e.link}" style="cursor:pointer"`:''}><span class="ld"><b>${esc(e.desc)}${e.memo?' <span class="badge b-gray">memo</span>':''}</b><span>${fmtDate(e.date)}${e.ref?' · '+esc(e.ref):''}</span></span><span class="num" style="color:var(--green)">${e.dr?money(e.dr):''}</span><span class="num" style="color:var(--red)">${e.cr?money(e.cr):''}</span><span class="num" style="font-weight:600;color:${run>0.004?'var(--green)':run<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(run))} ${Math.abs(run)<0.004?'':run>0?'Dr':'Cr'}</span></div>`}).join(''):`<div class="muted" style="text-align:center;padding:16px 0">No ledger entries yet.</div>`}
  </div></div>`;
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
- $('#pdEdit').onclick=()=>openPartyModal(p);
- $('#pdToggle').onclick=()=>confirmBox(p.active===false?'Reactivate party?':'Block billing for this party?',p.active===false?'This party can be selected for new billing again.':'New invoices/orders for this party will be blocked. Existing ledger and receipts/payments remain available.',()=>{dbUpdate('parties',id,{active:p.active===false});toast(p.active===false?'Party reactivated':'Party blocked for billing');route()});
- $('#pdDelete').onclick=()=>{
-  const used=[SALES,PURCHASES,SRET,PRET,RECEIPTS,PAYMENTS].some(fn=>fn().some(d=>d.partyId===id));
-  const linked=USERS().some(u=>u.partyId===id);
-  const hasOpening=(+p.openingBalance||0)!==0;
-  if(used||linked||hasOpening)return toast('Cannot delete: party has transactions, an opening balance, or a linked login. Block billing instead.','err');
-  confirmBox('Delete '+p.name+'?','This party has no linked login or transactions. This cannot be undone.',()=>{dbDel('parties',id);toast('Party deleted');go('parties')})
- }}
+ $('#pdEdit').onclick=()=>openPartyModal(p)}
 
 function vItems(){setTop('Items');setActiveNav('items');let q='';
  const editOK=can.stockEdit(S.me);
@@ -2342,6 +2325,24 @@ function route(){
  if(a==='settings'){if(!can.settings(u)){toast('Admin only','err');return vDash()}return vSettings()}
  go('dash');
  }catch(e){console.error(e);showFatal(e.message)}}
+// Desktop keyboard shortcuts: Alt+letter opens common sections (two keys only). Arrow keys move through
+// sidebar links when a sidebar link has focus; inputs retain normal arrow behavior.
+window.addEventListener('keydown',function(e){
+ const target=e.target,tag=(target&&target.tagName||'').toLowerCase();
+ const typing=tag==='input'||tag==='textarea'||tag==='select'||(target&&target.isContentEditable);
+ if(e.altKey&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!typing){
+  const map={'d':'dash','s':'sales','p':'purchases','r':'sale-returns','u':'purchase-returns','c':'collections','y':'payments','a':'parties','i':'items','o':'orders'};
+  const dest=map[(e.key||'').toLowerCase()];if(dest&&S.me&&S.me.role!=='customer'&&S.me.role!=='company'){
+   e.preventDefault();go(dest);return;
+  }
+ }
+ if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!typing){
+  const nav=document.getElementById('sideNav');if(!nav)return;
+  const links=Array.from(nav.querySelectorAll('a.slink'));if(!links.length)return;
+  const idx=links.indexOf(document.activeElement);
+  if(idx>=0){e.preventDefault();links[Math.max(0,Math.min(links.length-1,idx+(e.key==='ArrowDown'?1:-1)))].focus();}
+ }
+});
 window.addEventListener('hashchange',route);
 window.closeModal=closeModal;
 (function boot(){
