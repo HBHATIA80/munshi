@@ -433,10 +433,21 @@ async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
 function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
 function session(){return S.me}
 function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];closeSheet();closeModal();auth.signOut().catch(()=>{});S.me=null;go('login')}
-const RANK={customer:0,staff:1,company:1,admin:2,super:3};
+const RANK={customer:0,onlineStaff:0,staff:1,company:1,admin:2,super:3};
 const isMgr=()=>S.me&&RANK[S.me.role]>=2;
 const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK[u.role]>=2,wipe:u=>u&&u.role==='super',settings:u=>u&&RANK[u.role]>=2,profit:u=>u&&RANK[u.role]>=2};
 function subscribeAll(me){
+ if(me.role==='onlineStaff'){
+  const brands=Array.isArray(me.allocatedBrands)?me.allocatedBrands:[];
+  if(brands.length){
+   // Firestore 'in' queries are bounded; rules independently enforce assigned brand IDs.
+   const chunks=[];for(let i=0;i<brands.length;i+=10)chunks.push(brands.slice(i,i+10));
+   chunks.forEach(ids=>S.unsubs.push(DB.collection('items').where('brandId','in',ids).onSnapshot(s=>{const rows=s.docs.map(d=>Object.assign({id:d.id},d.data()));const keep=new Map((state.items||[]).map(x=>[x.id,x]));rows.forEach(x=>keep.set(x.id,x));state.items=Array.from(keep.values()).filter(x=>brands.includes(x.brandId));onLive()},e=>console.error('online items',e.code))));
+   brands.forEach(id=>S.unsubs.push(DB.collection('brands').doc(id).get().then(d=>{if(d.exists){state.brands=[...(state.brands||[]).filter(x=>x.id!==d.id),Object.assign({id:d.id},d.data())];onLive()}}).catch(()=>{})));
+  }
+  S.unsubs.push(DB.collection('orders').where('staffId','==',me.id).onSnapshot(s=>{state.orders=s.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},e=>console.error('online orders',e.code)));
+  return;
+ }
  if(me.role==='company'){
   const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{state[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
   ['items','categories','brands','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj'].forEach(sub);
@@ -755,7 +766,7 @@ function renderJoin(){
   const d=inv.data();const st=inviteState(d);
   if(st[0]==='used')return err('This code has already been used.');
   if(st[0]==='expired')return err('This code has expired. Ask for a new one.');
-  showJoinForm({id:code,role:d.role})};
+  showJoinForm({id:code,role:d.role,allocatedBrands:d.allocatedBrands||[]})};
 }
 function showJoinForm(inv){
  authShell(`<div class="card cardpad">
@@ -783,7 +794,7 @@ function showJoinForm(inv){
    const re=await DB.collection('invites').doc(inv.id).get();
    if(!re.exists||re.data().used){b.disabled=false;b.textContent='Create account & sign in';return err('This code has just been used or revoked.')}
    const cred=await auth.createUserWithEmailAndPassword(mobileToEmail(mob),pw);
-   await DB.collection('users').doc(cred.user.uid).set({name,mobile:mob,role:inv.role,inviteCode:inv.id,active:true,created:Date.now()});
+   await DB.collection('users').doc(cred.user.uid).set({name,mobile:mob,role:inv.role,allocatedBrands:inv.allocatedBrands||[],inviteCode:inv.id,active:true,created:Date.now()});
    await DB.collection('logins').doc(mob).set({email:mobileToEmail(mob)});
    await DB.collection('invites').doc(inv.id).set({used:true,usedBy:name,usedTs:Date.now()},{merge:true});
   }catch(ex){b.disabled=false;b.textContent='Create account & sign in';
@@ -804,7 +815,7 @@ function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openMod
 
 function renderShell(){
  const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
- const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
+ const isOnline=u.role==='onlineStaff';const nav=isCust?[{g:'',items:CNAV}]:isOnline?[{g:'Online orders',items:[['online','My work','bag']]}]:navItems(u);
  const shortcutMap={'dash':'Alt+D','sales':'Alt+S','purchases':'Alt+P','sale-returns':'Alt+R','purchase-returns':'Alt+U','collections':'Alt+C','payments':'Alt+Y','parties':'Alt+A','items':'Alt+I','orders':'Alt+O'};
  const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:'';const k=shortcutMap[it[0]]?`<kbd class="keyhint">${shortcutMap[it[0]]}</kbd>`:'';
   return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}" title="${it[1]}${shortcutMap[it[0]]?' · '+shortcutMap[it[0]]:''}">${ic(it[2],17)}<span>${it[1]}</span>${k}${b}</a>`};
@@ -812,14 +823,14 @@ function renderShell(){
  <aside class="side">
    <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
    <nav id="sideNav">${nav.map(g=>(g.g?`<div class="sgroup">${g.g}</div>`:'')+g.items.map(linkHtml).join('')).join('')}</nav>
-   <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role==='company'?'COMPANY VIEW':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
+   <div class="sfoot"><div class="avatar">${ini}</div><div style="min-width:0"><b style="font:600 13px var(--disp);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name)}</b><span style="font:500 10px var(--mono);color:#8FA795">${u.role==='super'?'SUPER ADMIN':u.role==='company'?'COMPANY VIEW':u.role==='onlineStaff'?'ONLINE ORDER STAFF':u.role.toUpperCase()}</span></div><button class="icon-btn" style="margin-left:auto;background:transparent;border-color:rgba(233,240,234,.2);color:#C3D2C5" id="sideOut">${ic('logout',16)}</button></div>
  </aside>
  <main class="main">
    <header class="topbar"><div class="tleft"><a class="icon-btn" id="topBack" href="#/${isCust?'shop':'dash'}">${ic('back',17)}</a><h1 id="pageTitle">${isCust?'Shop':'Dashboard'}</h1></div>
    <div class="tright"><span class="livewrap"><i></i>LIVE</span><button class="uchip" id="uChip"><span class="uname">${esc(u.name)}</span><span class="avatar">${ini}</span></button></div></header>
    <div id="view" class="view"></div>
  </main>
- <nav class="bnav">${(isCust?CNAV:u.role==='company'?[['dash','Home','home'],['r/stock','Stock','box']]:[['dash','Home','home'],['sales','Sales','bag'],['purchases','Purchase','truck'],['r/stock','Stock','box'],['more','More','grid']]).map(it=>{
+ <nav class="bnav">${(isCust?CNAV:u.role==='onlineStaff'?[['online','My work','bag']]:u.role==='company'?[['dash','Home','home'],['r/stock','Stock','box']]:[['dash','Home','home'],['sales','Sales','bag'],['purchases','Purchase','truck'],['r/stock','Stock','box'],['more','More','grid']]).map(it=>{
    const b=it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:it[0]==='more'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:'';
    return it[0]==='more'?`<button id="moreBtn">${ic(it[2],20)}${it[1]}${b}</button>`:`<a href="#/${it[0]}" data-nav="${it[0]}">${ic(it[2],20)}${it[1]}${b}</a>`}).join('')}</nav>`;
  $('#uChip').onclick=()=>isCust?openAccountSheet():userSheet();
@@ -1177,7 +1188,7 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
      row.querySelector('.fl-rate').value=o.rate;recalc()}});
    row.querySelector('.fl-qty').oninput=e=>{st.lines[i].qty=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
    row.querySelector('.fl-rate').oninput=e=>{st.lines[i].rate=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
-   row.querySelector('.fl-del').onclick=()=>{st.lines.splice(i,1);if(!st.lines.length)st.lines.push({itemId:'',qty:1,rate:0});renderLines()}})}
+   row.querySelector('.fl-del').onclick=()=>{st.lines.splice(i,1);if(!st.lines.length)st.lines.push({itemId:'',qty:1,rate:0});renderLines();recalc()}})}
  function totals(){const sub=sum(st.lines,l=>l.itemId?l.qty*l.rate:0);return{sub,total:Math.max(0,sub-((D.isReturn?0:st.discount)||0))}}
  function recalc(){const t=totals();
   $('#t-sub').textContent=money(t.sub);
@@ -1858,6 +1869,29 @@ function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.re
   bindRange(key);bindTabs(key)};
  draw()}
 
+function vOnlineStaff(){
+ setTop('Online Order Staff');setActiveNav('online');
+ const u=S.me,brands=Array.isArray(u.allocatedBrands)?u.allocatedBrands:[];let month=new Date().toISOString().slice(0,7),filter='all';
+ const orders=()=>ORDERS().filter(o=>o.staffId===u.id).slice().sort((a,b)=>(b.created||0)-(a.created||0));
+ const draw=()=>{
+  const os=orders(),mo=os.filter(o=>(o.date||'').slice(0,7)===month),pending=mo.filter(o=>!['delivered','cancelled'].includes(o.status)),delivered=mo.filter(o=>o.status==='delivered');
+  const products=ITEMS().filter(i=>brands.includes(i.brandId)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const visible=mo.filter(o=>filter==='all'||(filter==='pending'?!['delivered','cancelled'].includes(o.status):o.status===filter));
+  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">My online orders</div><div class="psub">Spark-safe mode: assigned-brand product catalogue and your own order history only.</div></div></div>
+   <div class="notice"><div><b>Order placement is disabled in this version.</b> On the Spark free plan, this browser-only app cannot securely validate customer mobile ownership and every product brand in an order. This page will not create customers or orders.</div></div>
+   ${!brands.length?'<div class="notice red">No brands are allocated to this account. Contact the administrator.</div>':''}
+   <div class="sumrow">${sumTile('Orders this month',mo.length)}${sumTile('Pending orders',pending.length,'var(--amber)')}${sumTile('Delivered orders',delivered.length,'var(--green)')}${sumTile('Month order value',money(sum(mo.filter(o=>o.status!=='cancelled'),o=>o.total)))}</div>
+   <div class="card cardpad" style="margin-bottom:14px"><div class="pagehead"><div><div class="ptitle" style="font-size:19px">Allocated-brand products</div><div class="psub">Catalogue view only — prices shown are the current app sale rates.</div></div><span class="badge">${products.length} products</span></div><div class="field"><label class="fl">Search products</label><input class="in" id="osProductSearch" placeholder="Search product name or SKU"></div><div id="osProductRows" class="list"></div></div>
+   <div class="card cardpad"><div class="pagehead"><div><div class="ptitle" style="font-size:19px">My order history</div><div class="psub">Only orders assigned to your staff account should appear here.</div></div><input type="month" class="in" id="osMonth" value="${month}" style="max-width:180px"></div>
+    <div class="tabs"><button class="chip ${filter==='all'?'on':''}" data-osf="all">All</button><button class="chip ${filter==='pending'?'on':''}" data-osf="pending">Pending</button><button class="chip ${filter==='delivered'?'on':''}" data-osf="delivered">Delivered</button><button class="chip ${filter==='cancelled'?'on':''}" data-osf="cancelled">Cancelled</button></div><div id="osHistory" class="list"></div>
+   </div>`;
+  const renderProducts=()=>{const q=($('#osProductSearch')?.value||'').toLowerCase();const list=products.filter(i=>((i.name||'')+' '+(i.sku||'')).toLowerCase().includes(q));$('#osProductRows').innerHTML=list.length?list.map(i=>`<div class="lrow"><div class="lmain"><div class="lname">${esc(i.name||'Unnamed product')}</div><div class="lsub">${esc(brandById(i.brandId)?.name||'Allocated brand')}${i.sku?' · '+esc(i.sku):''}</div></div><div class="lright"><div class="lamt">${money(i.saleRate)}</div></div></div>`).join(''):'<div class="empty">No matching products from your allocated brands.</div>'};
+  const renderHistory=()=>{const list=moForFilter();$('#osHistory').innerHTML=list.length?list.map(o=>`<div class="lrow" data-osorder="${esc(o.id)}"><div class="lmain"><div class="lname">${esc(o.no||'Order')} <span class="badge ${o.status==='delivered'?'b-green':o.status==='cancelled'?'b-red':'b-amber'}">${esc(o.status||'new')}</span></div><div class="lsub">${fmtDate(o.date)} · ${esc(o.customerName||o.partyName||'Customer')} · ${LINES(o).length} line(s)</div></div><div class="lright"><div class="lamt">${money(o.total)}</div></div></div>`).join(''):'<div class="empty">No orders for this month and filter.</div>';qsa('[data-osorder]').forEach(el=>el.onclick=()=>{const o=orders().find(x=>x.id===el.dataset.osorder);if(o)openModal(`<div class="mhead"><h3>${esc(o.no||'Order')} · ${esc(o.status||'new')}</h3><button class="icon-btn" onclick="closeModal()">×</button></div><div class="mbody"><p class="muted">${fmtDate(o.date)} · ${esc(o.customerName||'Customer')}</p>${(o.lines||[]).map(l=>{const it=products.find(x=>x.id===l.itemId);return `<div class="lowrow"><span>${esc(it?.name||l.itemName||'Item')} × ${l.qty}</span><b>${money((+l.qty||0)*(+l.rate||0))}</b></div>`}).join('')}<div class="trow grand"><span>Total</span><b>${money(o.total)}</b></div><p class="muted">Latest status: ${esc(o.status||'new')}</p></div>`)});};
+  const moForFilter=()=>orders().filter(o=>(o.date||'').slice(0,7)===month).filter(o=>filter==='all'||(filter==='pending'?!['delivered','cancelled'].includes(o.status):o.status===filter));
+  $('#osProductSearch').oninput=renderProducts;$('#osMonth').onchange=()=>{month=$('#osMonth').value||month;draw()};qsa('[data-osf]').forEach(b=>b.onclick=()=>{filter=b.dataset.osf;draw()});renderProducts();renderHistory();
+ };
+ draw();
+}
 function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
  let q='',f='all',preset='30d',minAmt='',maxAmt='',brand='all';
  let [from,to]=presetRange(preset);
@@ -2115,16 +2149,19 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
 async function openInviteModal(){const me=S.me;
- const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only']];
+ const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="ivForm">
   <div class="frow"><div class="field"><label class="fl">Role</label><select class="sel" id="iv-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div>
   <div class="field"><label class="fl">Valid for</label><select class="sel" id="iv-days"><option value="7">7 days</option><option value="30">30 days</option></select></div></div>
+  <div id="ivBrands" class="field" style="display:none"><label class="fl">Brands allocated to this staff member</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${BRANDS().map(b=>`<label style="display:flex;gap:7px;align-items:center;font-size:13px"><input type="checkbox" name="ivBrand" value="${b.id}"> ${esc(b.name)}</label>`).join('')||'<span class="muted">Create brands first.</span>'}</div></div>
   <div class="muted" style="font-size:12.5px;margin-bottom:14px">One-time use. Send the code to one person only — they open the site, tap <b>“Invited? Join with a code”</b>, enter it, and create their own mobile + password.</div>
   <button class="btn btn-primary" style="width:100%">Generate code</button></form></div>`);
+ const roleSel=$('#iv-role');const brandBox=$('#ivBrands');const syncBrandPick=()=>{brandBox.style.display=roleSel.value==='onlineStaff'?'block':'none'};roleSel.onchange=syncBrandPick;syncBrandPick();
  $('#ivForm').onsubmit=e=>{e.preventDefault();
-  const code=genInviteCode();
-  dbAdd('invites',{code,role:$('#iv-role').value,days:+$('#iv-days').value,createdTs:Date.now(),used:false});
+  const code=genInviteCode(),role=roleSel.value,allocatedBrands=role==='onlineStaff'?Array.from(document.querySelectorAll('input[name=ivBrand]:checked')).map(x=>x.value):[];
+  if(role==='onlineStaff'&&!allocatedBrands.length)return toast('Select at least one approved brand','err');
+  dbAdd('invites',{code,role,allocatedBrands,days:+$('#iv-days').value,createdTs:Date.now(),used:false});
   openModal(`<div class="mhead"><h3>Invite created</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
   <div class="mbody" style="text-align:center">
    <span class="lbl">Share this code privately</span>
@@ -2133,7 +2170,7 @@ async function openInviteModal(){const me=S.me;
    <button class="btn btn-primary" style="width:100%;margin-top:8px" id="ivCopy">${ic('edit',16)}Copy code</button></div>`);
   $('#ivCopy').onclick=()=>copyText(code)}}
 async function openTeamModal(){const me=S.me;
- const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin'],['super','Super admin']]:[['staff','Staff'],['company','Company · figures only']];
+ const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only'],['admin','Admin'],['super','Super admin']]:[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only']];
  openModal(`<div class="mhead"><h3>Add staff / admin directly</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="nuForm">
   <div class="field"><label class="fl">Full name</label><input class="in" id="nu-name" required></div>
@@ -2361,8 +2398,9 @@ function route(){
  if(!u){go('login');return}
  if(!document.querySelector('.side'))renderShell();
  updateBadges();
- const a=p[0]||(u.role==='customer'?'shop':'dash');
- if(u.role==='customer'){
+ const a=p[0]||(u.role==='customer'?'shop':u.role==='onlineStaff'?'online':'dash');
+ if(u.role==='onlineStaff'){if(a==='online')return vOnlineStaff();go('online');return}
+ if(u.role==='customer'){ 
   if(a==='shop')return vShop();
   if(a==='cart')return vCart();
   if(a==='my-orders')return p[1]?vOrderDetail(p[1],true):vMyOrders();
