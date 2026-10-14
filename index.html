@@ -2099,7 +2099,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
     <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role==='company'?'Company':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
-    ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
+    ${canTouch(t)?`<div style="display:flex;gap:6px">${t.role==='onlineStaff'?`<button class="icon-btn" data-alloc="${t.id}" title="Allocate brands">${ic('tag',15)}</button>`:''}<button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
    <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
   else if(tab==='customers'){body=`<button class="btn btn-primary" id="tcNew" style="margin-bottom:12px">${ic('plus',16)}Create customer login</button>
    <div class="card"><div class="list">${custs.length?custs.map(t=>{const p=partyById(t.partyId);const bal=p?partyBalance(p.id):0;const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -2138,6 +2138,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   qsa('[data-rej]').forEach(b=>b.onclick=()=>confirmBox('Reject request?','They will be asked to contact you directly.',()=>{dbUpdate('regRequests',b.dataset.rej,{status:'rejected'})}));
   qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
   qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
+  qsa('[data-alloc]').forEach(b=>b.onclick=()=>openOnlineBrandAllocation(USERS().find(x=>x.id===b.dataset.alloc)));
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
   qsa('[data-resetm]').forEach(b=>b.onclick=()=>{const u2=USERS().find(x=>x.mobile===b.dataset.resetm);if(u2)openResetPwModal(u2,RESETS().find(r=>r.mobile===u2.mobile&&r.status==='pending')?.id)});
   qsa('[data-tg]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.tg);
@@ -2148,6 +2149,14 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    if(t.role==='super'&&USERS().filter(x=>x.role==='super'&&x.active!==false).length<=1)return toast('Last super admin cannot be removed','err');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
+function openOnlineBrandAllocation(t){
+ if(!t||t.role!=='onlineStaff')return toast('Select an Online Order Staff account','err');
+ const current=Array.isArray(t.allocatedBrands)?t.allocatedBrands.map(String):[];
+ const list=BRANDS();
+ openModal(`<div class="mhead"><h3>Allocate brands · ${esc(t.name||t.mobile||'Online Staff')}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div><div class="mbody"><p class="muted" style="font-size:13px;margin-bottom:12px">Only selected brands will be shown in this staff member’s catalogue.</p><div id="osAllocList" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${list.map(b=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:9px"><input type="checkbox" name="osAllocBrand" value="${esc(b.id)}" ${current.includes(String(b.id))?'checked':''}>${esc(b.name||b.id)}</label>`).join('')||'<div class="empty">No brands found. Create brands first.</div>'}</div><div class="savebar" style="margin-top:14px"><button class="btn btn-primary" id="osAllocSave" style="width:100%">Save brand allocation</button></div></div>`);
+ const save=$('#osAllocSave');if(save)save.onclick=async()=>{const ids=Array.from(document.querySelectorAll('input[name="osAllocBrand"]:checked')).map(x=>x.value);save.disabled=true;save.textContent='Saving…';try{await DB.collection('users').doc(t.id).set({allocatedBrands:ids,brandIds:ids,assignedBrandIds:ids,brandAllocationUpdatedAt:Date.now()},{merge:true});t.allocatedBrands=ids;t.brandIds=ids;t.assignedBrandIds=ids;closeModal();toast('Brand allocation saved');if(S.me&&S.me.id===t.id){S.me.allocatedBrands=ids;S.me.brandIds=ids;S.me.assignedBrandIds=ids;logout()}else route()}catch(e){console.error(e);save.disabled=false;save.textContent='Save brand allocation';toast('Could not save allocation: '+(e.code||'unknown error'),'err')}};
+}
+
 async function openInviteModal(){const me=S.me;
  const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only'],['onlineStaff','Online Order Staff · allocated brands only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
@@ -2177,18 +2186,22 @@ async function openTeamModal(){const me=S.me;
   <div class="frow"><div class="field"><label class="fl">Mobile (login ID)</label><input class="in" id="nu-user" required inputmode="numeric" placeholder="10-digit mobile"></div>
   <div class="field"><label class="fl">Role</label><select class="sel" id="nu-role">${roles.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select></div></div>
   <div class="field"><label class="fl">Password</label><input class="in" id="nu-pass" type="password" required></div>
+  <div id="nuBrands" class="field" style="display:none"><label class="fl">Allocate brands to Online Order Staff</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${BRANDS().map(b=>`<label style="display:flex;gap:7px;align-items:center;font-size:13px"><input type="checkbox" name="nuBrand" value="${esc(b.id)}">${esc(b.name)}</label>`).join('')||'<span class="muted">Create brands first.</span>'}</div></div>
   <div id="nuErr" class="notice red" style="display:none"></div>
   <div class="muted" style="font-size:12px;margin-bottom:14px">Share the mobile + password privately. Prefer an invite code when the person uses their own device.</div>
   <button class="btn btn-primary" style="width:100%">Create account</button></form></div>`);
+ const rolePick=$('#nu-role'),brandPick=$('#nuBrands');const syncDirectBrands=()=>{brandPick.style.display=rolePick.value==='onlineStaff'?'block':'none'};rolePick.onchange=syncDirectBrands;syncDirectBrands();
  $('#nuForm').onsubmit=async e=>{e.preventDefault();const err=m=>{const n=$('#nuErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>'+esc(m)+'</span>'};
   const mob=normMobile($('#nu-user').value),name=$('#nu-name').value.trim(),pw=$('#nu-pass').value,role=$('#nu-role').value;
   if(!validMobile(mob))return err('Enter a valid 10-digit mobile number');
   if(pw.length<4)return err('Password too short');
   if(role==='super'&&me.role!=='super')return err('Only a super admin can create another super admin');
+  const allocatedBrands=role==='onlineStaff'?Array.from(document.querySelectorAll('input[name=nuBrand]:checked')).map(x=>x.value):[];
+  if(role==='onlineStaff'&&!allocatedBrands.length)return err('Select at least one brand for Online Order Staff');
   try{
    const newUid=await createAuthUser(mobileToEmail(mob),pw);
    const batch=DB.batch();
-   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,active:true,created:Date.now()});
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,active:true,allocatedBrands,brandIds:allocatedBrands,assignedBrandIds:allocatedBrands,created:Date.now()});
    batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
    closeModal();toast('Account created — ID: '+mob);route()}
