@@ -443,24 +443,45 @@ const can={stockEdit:u=>u&&(u.role==='admin'||u.role==='super'),users:u=>u&&RANK
    3 Party billing block               4 Sub-categories
    5 Profit analysis tabs (brand/party/sub-category)      */
 
-/* ---- 1) Brand scope: applies to ANY role (super never restricted; empty allocation = full access) ---- */
-function brandScopeOf(me){
-  if(!me||me.role==='super')return null;
-  const b=Array.isArray(me.allocatedBrands)?me.allocatedBrands.filter(Boolean):[];
-  return b.length?b:null;
+/* ---- 1) Brand scope: applies to any role; super is always unrestricted.
+   Empty allocation intentionally means all brands, matching the allocation UI. */
+function brandScopeOf(me) {
+  if (!me || me.role === 'super') return null;
+
+  // Support the allocation field names used by different versions.
+  const fields = [me.allocatedBrands, me.assignedBrandIds, me.brandIds];
+  const brands = [...new Set(
+    fields
+      .flatMap(value => Array.isArray(value) ? value : [])
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+  )];
+
+  // Preserve the app's existing policy: an empty allocation is unrestricted.
+  return brands.length ? brands : null;
 }
-function subscribeBrandScope(me){
-  const brands=brandScopeOf(me);if(!brands)return null;
-  const chunks=[];for(let i=0;i<brands.length;i+=10)chunks.push(brands.slice(i,i+10));
-  chunks.forEach(ids=>S.unsubs.push(DB.collection('items').where('brandId','in',ids).onSnapshot(s=>{
-    const rows=s.docs.map(d=>Object.assign({id:d.id},d.data()));
-    const keep=new Map((state.items||[]).map(x=>[x.id,x]));
-    rows.forEach(x=>keep.set(x.id,x));
-    state.items=Array.from(keep.values()).filter(x=>brands.includes(x.brandId));onLive();
-  },e=>console.error('brand items',e.code))));
-  brands.forEach(id=>S.unsubs.push(DB.collection('brands').doc(id).get().then(d=>{
-    if(d.exists){state.brands=[...(state.brands||[]).filter(x=>x.id!==d.id),Object.assign({id:d.id},d.data())];onLive()}
-  }).catch(()=>{})));
+
+function subscribeBrandScope(me) {
+  const brands = brandScopeOf(me);
+  if (!brands) return null;
+
+  // Load allocated brand records only. Product listeners remain in subscribeAll().
+  brands.forEach(id => {
+    DB.collection('brands').doc(id).get()
+      .then(doc => {
+        if (!doc.exists) return;
+        const brand = Object.assign({ id: doc.id }, doc.data());
+        state.brands = [
+          ...(state.brands || []).filter(item => item.id !== doc.id),
+          brand
+        ];
+        onLive();
+      })
+      .catch(error => {
+        console.error('Brand lookup failed:', id, error.code || error);
+      });
+  });
+
   return brands;
 }
 
@@ -561,7 +582,25 @@ async function saveLedgerTxn(pid,kind){
 
 function subscribeAll(me){
  if(me.role==='onlineStaff'){
-  subscribeBrandScope(me);
+  const bscope = subscribeBrandScope(me);
+  let itemQuery = DB.collection('items');
+  if (bscope) {
+   const chunks = [];
+   for (let i = 0; i < bscope.length; i += 10) chunks.push(bscope.slice(i, i + 10));
+   const byChunk = new Map();
+   chunks.forEach((ids, index) => {
+    S.unsubs.push(itemQuery.where('brandId', 'in', ids).onSnapshot(snapshot => {
+     byChunk.set(index, snapshot.docs.map(d => Object.assign({id: d.id}, d.data())));
+     state.items = [...byChunk.values()].flat();
+     onLive();
+    }, error => console.error('Brand item subscription failed:', error.code || error)));
+   });
+  } else {
+   S.unsubs.push(itemQuery.onSnapshot(snapshot => {
+    state.items = snapshot.docs.map(d => Object.assign({id: d.id}, d.data()));
+    onLive();
+   }, error => console.error('Items subscription failed:', error.code || error)));
+  }
   S.unsubs.push(DB.collection('orders').where('staffId','==',me.id).onSnapshot(s=>{state.orders=s.docs.map(d=>Object.assign({id:d.id},d.data()));onLive()},e=>console.error('online orders',e.code)));
   return;
  }
@@ -1958,7 +1997,7 @@ function vOrders(){setTop('Online Orders');setActiveNav('orders');S.draftOrder=n
   qsa('.lrow[data-id]').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
  draw()}
 function vShop(){setTop('Shop');setActiveNav('shop');let q='',cf='all';
- const draw=()=>{const items=ITEMS().filter(i=>!q||((i.name||'')+' '+(i.sku||'')+' '+(brandById(i.brandId)?.name||'')).toLowerCase().includes(q))).filter(i=>cf==='all'||i.categoryId===cf||SUBCATS(cf).some(s=>s.id===i.categoryId));
+ const draw=()=>{const items=ITEMS().filter(i=>(!q||(((i.name||'')+' '+(i.sku||'')+' '+(brandById(i.brandId)?.name||'')).toLowerCase().includes(q)))&&(cf==='all'||i.categoryId===cf||SUBCATS(cf).some(s=>s.id===i.categoryId)));
   V().innerHTML=`
   <div class="pagehead"><div><span class="lbl">${esc(SET().businessName)} · wholesale</span><div class="ptitle">Shop</div><div class="psub">Pick accessories and place an order — we confirm and deliver.</div></div></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="sq" placeholder="Search products…" value="${esc(q)}"></div>
