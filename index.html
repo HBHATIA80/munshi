@@ -1347,7 +1347,7 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
       </div>
     </div></div>
   <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
-  <div class="field"><label class="fl">Subcategory</label><input class="in" id="im-subcat" list="im-subcat-options" value="${esc(it?.subcategory||'')}" placeholder="Enter subcategory"><datalist id="im-subcat-options">${[...new Set(ITEMS().map(x=>x.subcategory).filter(Boolean))].sort().map(x=>`<option value="${esc(x)}"></option>`).join('')}</datalist></div></div>
+  <div class="field"><label class="fl">Subcategory</label><input class="in" id="im-subcategory" value="${esc(it?.subcategory||'')}" placeholder="Enter subcategory"></div></div>
   <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div>
   <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?+it.purchaseRate||'':''}"></div>
   <div class="field"><label class="fl">Sale rate</label><input class="in" type="number" step="any" id="im-sr" value="${it?+it.saleRate||'':''}"></div></div>
@@ -1367,7 +1367,7 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
   catch(ex){toast('Could not read that image','err')}
   btn.disabled=false;btn.innerHTML=old;e.target.value=''};
  if($('#ph-rm'))$('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
- $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,subcategory:$('#im-subcat').value.trim(),brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
+ $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,subcategory:$('#im-subcategory').value.trim(),brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
   if(!o.name)return toast('Name is required','err');
   if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}closeModal();route()}}
 function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
