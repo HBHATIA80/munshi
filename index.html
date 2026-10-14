@@ -430,7 +430,7 @@ function dbAdd(c,o){const id=c==='invites'?o.code:(o.id||uid());const doc=Object
 function dbUpdate(c,id,p){const d=Object.assign({},p);delete d.id;DB.collection(c).doc(id).set(d,{merge:true}).catch(e=>{console.error('update',c,e);toast('Update failed: '+e.code,'err')})}
 function dbDel(c,id){DB.collection(c).doc(id).delete().catch(e=>{console.error('del',c,e);toast('Delete failed: '+e.code,'err')})}
 function dbGet(c,id){return (state[c]||[]).find(x=>x.id===id)}
-const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
+const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>ALLCATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
 function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address,welcomed:!!s.welcomed};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
 async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
  const n=await DB.runTransaction(async t=>{const s=await t.get(ref);const c=(s.exists&&s.data()[pre])||0;t.set(ref,{[pre]:c+1},{merge:true});return c+1});
@@ -1546,9 +1546,11 @@ function openStockModal(it){if(!it)return;
   toast('Stock adjusted');closeModal();route()}}
 
 function vCats(){setTop('Categories');setActiveNav('categories');
- const draw=()=>{const roots=CATS().filter(c=>!c.parentId).sort((a,b)=>a.name.localeCompare(b.name));
-  const subs=groupBy(CATS().filter(c=>c.parentId),'parentId');
-  const itemsIn=id=>ITEMS().filter(i=>i.categoryId===id||i.subcategoryId===id||i.subCategoryId===id).length;
+ const draw=()=>{const all=ALLCATS();
+  const roots=all.filter(c=>!catParentId(c)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const childRows=all.filter(c=>!!catParentId(c));
+  const subs={};childRows.forEach(c=>{const pid=catParentId(c);(subs[pid]||(subs[pid]=[])).push(c)});
+  const itemsIn=id=>ITEMS().filter(i=>i.categoryId===id||i.subcategoryId===id||i.subCategoryId===id||i.subcategory===id||i.subCategory===id).length;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Categories</div><div class="psub">${roots.length} top-level · ${childRows.length} subcategories</div></div><button class="btn btn-primary" id="cNew">${ic('plus',16)}New</button></div>
   <div class="card"><div class="list">${roots.length?roots.map(r=>{const tc=tileFor(r.name);return `<div class="lrow editmode"><span class="avatar" style="background:${tc[0]};color:${tc[1]}">${esc(r.name[0]||'?')}</span>
    <div class="lmain"><div class="lname">${esc(r.name)}</div><div class="lsub"><span>${itemsIn(r.id)} items</span>${(subs[r.id]||[]).map(s=>`<span>· ${esc(s.name)}</span>`).join('')}</div></div>
