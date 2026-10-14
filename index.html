@@ -1859,18 +1859,64 @@ function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.re
  draw()}
 
 function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
- let q='',f='all';
- const draw=()=>{const os=ORDERS().slice().sort((a,b)=>(b.created||0)-(a.created||0));
-  const counts={all:os.length};os.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);
-  const fl=os.filter(o=>(f==='all'||o.status===f)&&(!q||(o.no+' '+(partyById(o.partyId)?.name||'')).toLowerCase().includes(q)));
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Orders</div><div class="psub">${fl.length} orders · from the customer portal · updates live</div></div></div>
-  <div class="tabs">${['all','new','confirmed','delivered','invoiced','cancelled'].map(s=>`<button class="chip ${f===s?'on':''}" data-of="${s}">${s==='all'?'All':OSTAT[s][0]}${counts[s]?` <span class="mono" style="opacity:.7">${counts[s]}</span>`:''}</button>`).join('')}</div>
-  <div class="searchbar">${ic('search',17)}<input class="in" id="oq" placeholder="Search order no. or customer…" value="${esc(q)}"></div>
-  <div class="card"><div class="list">${fl.length?fl.map(o=>{const p=partyById(o.partyId);
-   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${LINES(o).length} item${LINES(o).length>1?'s':''}</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders here</div>Orders placed by customers appear instantly.</div>`}</div></div>`;
+ let q='',f='all',preset='30d',minAmt='',maxAmt='',brand='all';
+ let [from,to]=presetRange(preset);
+ const draw=()=>{
+  const all=ORDERS().slice().sort((a,b)=>(b.created||0)-(a.created||0));
+  const inPeriod=all.filter(o=>inR(String(o.date||todayISO()).slice(0,10),from,to));
+  const counts={all:inPeriod.length};inPeriod.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);
+  const brands=[...new Set(inPeriod.flatMap(o=>LINES(o).map(l=>{const it=itemById(l.itemId);return it?(brandById(it.brandId)?.name||'Unassigned'):''})).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const matches=o=>{
+   const p=partyById(o.partyId);
+   const lineText=LINES(o).map(l=>{const it=itemById(l.itemId);return (it?.name||'')+' '+(brandById(it?.brandId)?.name||'')}).join(' ');
+   const search=(o.no+' '+(p?.name||'')+' '+(p?.phone||'')+' '+lineText).toLowerCase();
+   const amt=+o.total||0;
+   const brandMatch=brand==='all'||LINES(o).some(l=>{const it=itemById(l.itemId);return (it?(brandById(it.brandId)?.name||'Unassigned'):'')===brand});
+   return (f==='all'||o.status===f)&&(!q||search.includes(q))&&amt>=(minAmt===''?0:+minAmt)&&amt<=(maxAmt===''?Number.MAX_SAFE_INTEGER:+maxAmt)&&brandMatch;
+  };
+  const fl=inPeriod.filter(matches);
+  const orderValue=arr=>arr.reduce((n,o)=>n+(+o.total||0),0);
+  const delivered=inPeriod.filter(o=>o.status==='delivered'),cancelled=inPeriod.filter(o=>o.status==='cancelled'),newOrders=inPeriod.filter(o=>o.status==='new'),invoiced=inPeriod.filter(o=>o.status==='invoiced');
+  const invoicedValue=orderValue(invoiced);
+  const brandTotals={};inPeriod.filter(o=>o.status!=='cancelled').forEach(o=>LINES(o).forEach(l=>{const it=itemById(l.itemId);const bn=it?(brandById(it.brandId)?.name||'Unassigned'):'Unassigned';const lineGross=(+l.qty||0)*(+l.rate||0);brandTotals[bn]=(brandTotals[bn]||0)+lineGross}));
+  const brandRows=Object.entries(brandTotals).sort((a,b)=>b[1]-a[1]);
+  const maxBrand=Math.max(1,...brandRows.map(x=>x[1]));
+  const statusLabel=s=>s==='all'?'All':(OSTAT[s]?.[0]||s);
+  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Online Order Analytics</div><div class="psub">Track incoming orders, fulfilment, cancellations, customer demand and order value · ${fmtDate(from)} → ${fmtDate(to)}</div></div><div class="livewrap"><i></i> LIVE</div></div>
+  <div class="card cardpad" style="margin-bottom:14px">
+   <div class="lbl" style="margin-bottom:8px">Period</div>
+   <div class="tabs" style="margin-bottom:10px">${[['today','Today'],['7d','This week'],['month','This month'],['lmonth','Last month'],['30d','Last 30 days'],['all','All time']].map(([k,l])=>`<button class="chip ${preset===k?'on':''}" data-opreset="${k}">${l}</button>`).join('')}</div>
+   <div class="rdates"><label style="flex:1"><span class="fl">From</span><input id="ordFrom" class="in" type="date" value="${from}"></label><span style="padding-top:18px">→</span><label style="flex:1"><span class="fl">To</span><input id="ordTo" class="in" type="date" value="${to}"></label></div>
+  </div>
+  <div class="sumrow">
+   ${sumTile('Orders received',inPeriod.length,'var(--green)')}${sumTile('Order value',money(orderValue(inPeriod)))}${sumTile('New / pending',newOrders.length,'var(--amber)')}${sumTile('Delivered',delivered.length,'var(--green)')}
+   ${sumTile('Invoiced value',money(invoicedValue))}${sumTile('Cancelled',cancelled.length,'var(--red)')}${sumTile('Cancelled value',money(orderValue(cancelled)),'var(--red)')}${sumTile('Avg. order value',money(inPeriod.length?orderValue(inPeriod)/inPeriod.length:0))}
+  </div>
+  <div class="grid2" style="margin-bottom:14px">
+   <div class="card cardpad"><div class="pagehead" style="margin-bottom:8px"><div><div class="ptitle" style="font-size:18px">Orders by status</div><div class="psub">Count in selected period</div></div></div>
+    ${[['New',newOrders.length,'var(--amber)'],['Confirmed',inPeriod.filter(o=>o.status==='confirmed').length,'var(--ink2)'],['Delivered',delivered.length,'var(--green)'],['Invoiced',invoiced.length,'var(--green)'],['Cancelled',cancelled.length,'var(--red)']].map(([n,v,c])=>`<div class="brow"><div><span class="bname">${n}</span></div><div class="btrack"><i style="width:${v/Math.max(1,inPeriod.length)*100}%;background:${c}"></i></div><div class="bv">${v}</div></div>`).join('')}
+   </div>
+   <div class="card cardpad"><div class="pagehead" style="margin-bottom:8px"><div><div class="ptitle" style="font-size:18px">Demand by brand</div><div class="psub">Order-line value, excluding cancelled orders</div></div></div>
+    ${brandRows.length?brandRows.slice(0,8).map(([n,v])=>barRow(n,'',v,maxBrand,'var(--green)')).join(''):emptyHtml('box','No brand data in this period')}
+   </div>
+  </div>
+  <div class="pagehead"><div><div class="ptitle" style="font-size:20px">Order register</div><div class="psub">Search by order number, customer, phone or item; filter by status, brand and amount.</div></div></div>
+  <div class="tabs">${['all','new','confirmed','delivered','invoiced','cancelled'].map(s=>`<button class="chip ${f===s?'on':''}" data-of="${s}">${statusLabel(s)} <span class="mono" style="opacity:.7">${counts[s]||0}</span></button>`).join('')}</div>
+  <div class="searchbar">${ic('search',17)}<input class="in" id="oq" placeholder="Search order no., customer, phone, item or brand…" value="${esc(q)}"></div>
+  <div class="card cardpad" style="margin-bottom:12px"><div class="frow">
+   <label><span class="fl">Brand</span><select id="ordBrand" class="sel"><option value="all">All brands</option>${brands.map(b=>`<option value="${esc(b)}" ${brand===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+   <div class="frow" style="gap:8px"><label><span class="fl">Min amount ₹</span><input id="ordMin" class="in" type="number" min="0" placeholder="Any" value="${esc(minAmt)}"></label><label><span class="fl">Max amount ₹</span><input id="ordMax" class="in" type="number" min="0" placeholder="Any" value="${esc(maxAmt)}"></label></div>
+  </div><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-ghost btn-sm" id="ordClear">Clear filters</button></div></div>
+  <div class="card"><div class="list">${fl.length?fl.map(o=>{const p=partyById(o.partyId);const lines=LINES(o);const brandNames=[...new Set(lines.map(l=>{const it=itemById(l.itemId);return it?(brandById(it.brandId)?.name||'Unassigned'):'Unassigned'}))];
+   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no||'Order')}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${lines.length} item${lines.length!==1?'s':''}</span><span>·</span><span>${esc(brandNames.join(', '))}</span><span>·</span><span>${fmtDate(o.date)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${timeAgo(o.created)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders match these filters</div>Try a wider date range or clear the filters.</div>`}</div></div>`;
+  qsa('[data-opreset]').forEach(b=>b.onclick=()=>{preset=b.dataset.opreset;[from,to]=presetRange(preset);draw()});
+  const of=$('#ordFrom'),ot=$('#ordTo');if(of)of.onchange=e=>{from=e.target.value||'2000-01-01';preset='custom';draw()};if(ot)ot.onchange=e=>{to=e.target.value||todayISO();preset='custom';draw()};
   qsa('[data-of]').forEach(b=>b.onclick=()=>{f=b.dataset.of;draw()});
-  $('#oq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#oq');n.focus();n.setSelectionRange(pos,pos)};
-  qsa('.lrow').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
+  const search=$('#oq');search.oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#oq');n.focus();n.setSelectionRange(pos,pos)};
+  $('#ordBrand').onchange=e=>{brand=e.target.value;draw()};$('#ordMin').onchange=e=>{minAmt=e.target.value;draw()};$('#ordMax').onchange=e=>{maxAmt=e.target.value;draw()};
+  $('#ordClear').onclick=()=>{q='';f='all';brand='all';minAmt='';maxAmt='';draw()};
+  qsa('.lrow').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id));
+ };
  draw()}
 function setOrderStatus(id,status,by){const o=dbGet('orders',id);if(!o)return;
  dbUpdate('orders',id,{status,history:[...(o.history||[]),{ts:Date.now(),status,by:by||S.me.name}]});updateBadges()}
