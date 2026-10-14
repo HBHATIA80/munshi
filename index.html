@@ -313,6 +313,12 @@ body.locked{overflow:hidden}
 .pwords{margin-top:14px;font-size:12.5px;border:1px dashed #999;padding:9px 11px;border-radius:6px}
 
 .combo-it.active{background:var(--soft, #eef4f0);outline:2px solid var(--line, #cbd8d0);outline-offset:-2px}
+/* Desktop keyboard shortcut hints */
+.keyhint{margin-left:auto;padding:2px 5px;border:1px solid rgba(120,130,120,.28);border-radius:5px;font:600 10px var(--mono);line-height:1.4;color:var(--ink2);background:rgba(255,255,255,.55);white-space:nowrap}
+.slink{display:flex;align-items:center;gap:9px}
+.slink:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+@media(max-width:760px){.keyhint{display:none}}
+
 </style>
 </head>
 <body>
@@ -807,8 +813,9 @@ function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openMod
 function renderShell(){
  const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
  const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
- const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="margin-left:auto;display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="margin-left:auto;display:none">0</span>`:'';
-  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}">${ic(it[2],17)}${it[1]}${b}</a>`};
+ const shortcutMap={'dash':'Alt+D','sales':'Alt+S','purchases':'Alt+P','sale-returns':'Alt+R','purchase-returns':'Alt+U','collections':'Alt+C','payments':'Alt+Y','parties':'Alt+A','items':'Alt+I','orders':'Alt+O'};
+ const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:'';const k=shortcutMap[it[0]]?`<kbd class="keyhint">${shortcutMap[it[0]]}</kbd>`:'';
+  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}" title="${it[1]}${shortcutMap[it[0]]?' · '+shortcutMap[it[0]]:''}">${ic(it[2],17)}<span>${it[1]}</span>${k}${b}</a>`};
  $('#app').innerHTML=`
  <aside class="side">
    <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
@@ -2326,6 +2333,24 @@ function route(){
  if(a==='settings'){if(!can.settings(u)){toast('Admin only','err');return vDash()}return vSettings()}
  go('dash');
  }catch(e){console.error(e);showFatal(e.message)}}
+// Desktop keyboard shortcuts: Alt+letter opens common sections (two keys only). Arrow keys move through
+// sidebar links when a sidebar link has focus; inputs retain normal arrow behavior.
+window.addEventListener('keydown',function(e){
+ const target=e.target,tag=(target&&target.tagName||'').toLowerCase();
+ const typing=tag==='input'||tag==='textarea'||tag==='select'||(target&&target.isContentEditable);
+ if(e.altKey&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!typing){
+  const map={'d':'dash','s':'sales','p':'purchases','r':'sale-returns','u':'purchase-returns','c':'collections','y':'payments','a':'parties','i':'items','o':'orders'};
+  const dest=map[(e.key||'').toLowerCase()];if(dest&&S.me&&S.me.role!=='customer'&&S.me.role!=='company'){
+   e.preventDefault();go(dest);return;
+  }
+ }
+ if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!typing){
+  const nav=document.getElementById('sideNav');if(!nav)return;
+  const links=Array.from(nav.querySelectorAll('a.slink'));if(!links.length)return;
+  const idx=links.indexOf(document.activeElement);
+  if(idx>=0){e.preventDefault();links[Math.max(0,Math.min(links.length-1,idx+(e.key==='ArrowDown'?1:-1)))].focus();}
+ }
+});
 window.addEventListener('hashchange',route);
 window.closeModal=closeModal;
 (function boot(){
