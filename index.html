@@ -1319,7 +1319,7 @@ function vItems(){setTop('Items');setActiveNav('items');let q='';
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Items</div><div class="psub">${its.length} in catalogue${editOK?'':' · read-only for staff'}</div></div>${editOK?`<button class="btn btn-primary" id="iNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="iq" placeholder="Search items…" value="${esc(q)}"></div>
   <div class="card"><div class="list">${its.length?its.map(i=>{const so=stockOf(i.id),low=+(i.low||10);
-   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
+   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span>${i.subcategory?`<span>·</span><span>${esc(i.subcategory)}</span>`:''}<span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
    ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-stk="${i.id}" title="Adjust stock">${ic('layers',15)}</button><button class="icon-btn" data-edit="${i.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${i.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">${ic('box',34)}<div class="big">No items yet</div>Create your first accessory.</div>`}</div></div>`;
   if(editOK){$('#iNew').onclick=()=>openItemModal();
    qsa('[data-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();openItemModal(itemById(b.dataset.edit))});
@@ -1347,7 +1347,8 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
       </div>
     </div></div>
   <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
-  <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div></div>
+  <div class="field"><label class="fl">Subcategory</label><input class="in" id="im-subcat" list="im-subcat-options" value="${esc(it?.subcategory||'')}" placeholder="Enter subcategory"><datalist id="im-subcat-options">${[...new Set(ITEMS().map(x=>x.subcategory).filter(Boolean))].sort().map(x=>`<option value="${esc(x)}"></option>`).join('')}</datalist></div></div>
+  <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div>
   <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?+it.purchaseRate||'':''}"></div>
   <div class="field"><label class="fl">Sale rate</label><input class="in" type="number" step="any" id="im-sr" value="${it?+it.saleRate||'':''}"></div></div>
   <div class="frow"><div class="field"><label class="fl">Opening stock</label><input class="in" type="number" step="any" id="im-os" value="${it?+it.openingStock||'':''}" placeholder="0"></div>
@@ -1366,7 +1367,7 @@ function openItemModal(it){let photoVal=it?(it.photo||''):'';
   catch(ex){toast('Could not read that image','err')}
   btn.disabled=false;btn.innerHTML=old;e.target.value=''};
  if($('#ph-rm'))$('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
- $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
+ $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,subcategory:$('#im-subcat').value.trim(),brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
   if(!o.name)return toast('Name is required','err');
   if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}closeModal();route()}}
 function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
