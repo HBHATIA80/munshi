@@ -312,13 +312,11 @@ body.locked{overflow:hidden}
 .ptot .g{border-top:2px solid #111;font-weight:700;font-size:15px}
 .pwords{margin-top:14px;font-size:12.5px;border:1px dashed #999;padding:9px 11px;border-radius:6px}
 
-.combo-it.active{background:var(--soft, #eef4f0);outline:2px solid var(--line, #cbd8d0);outline-offset:-2px}
 /* Desktop keyboard shortcut hints */
 .keyhint{margin-left:auto;padding:2px 5px;border:1px solid rgba(120,130,120,.28);border-radius:5px;font:600 10px var(--mono);line-height:1.4;color:var(--ink2);background:rgba(255,255,255,.55);white-space:nowrap}
 .slink{display:flex;align-items:center;gap:9px}
 .slink:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 @media(max-width:760px){.keyhint{display:none}}
-
 </style>
 </head>
 <body>
@@ -372,31 +370,25 @@ const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
 function attachCombo(input,opts){
- let box=null,pool=[],activeIndex=-1;
- const choose=i=>{const o=pool[i];if(!o)return;input.value=o.label;close();opts.onPick&&opts.onPick(o)};
- const close=()=>{if(box){box.remove();box=null}pool=[];activeIndex=-1;input.removeAttribute('aria-activedescendant');input.setAttribute('aria-expanded','false')};
- const paintActive=()=>{if(!box)return;box.querySelectorAll('.combo-it').forEach((el,i)=>{el.classList.toggle('active',i===activeIndex);el.setAttribute('aria-selected',i===activeIndex?'true':'false')});const el=box.querySelector(`.combo-it[data-i="${activeIndex}"]`);if(el){input.setAttribute('aria-activedescendant',el.id);el.scrollIntoView({block:'nearest'})}else input.removeAttribute('aria-activedescendant')};
+ let box=null;
+ const close=()=>{if(box){box.remove();box=null}};
  const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
  const open=()=>{
   const q=(input.value||'').trim().toLowerCase();
-  pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
-  if(box){box.remove();box=null}activeIndex=-1;
-  if(!pool.length){input.setAttribute('aria-expanded','false');if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}return}
-  box=document.createElement('div');box.className='combo';box.setAttribute('role','listbox');
-  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" id="combo-opt-${Math.random().toString(36).slice(2)}-${i}" role="option" aria-selected="false" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
-  insert();input.setAttribute('aria-expanded','true');
-  box.querySelectorAll('.combo-it').forEach(el=>el.addEventListener('pointerdown',e=>{e.preventDefault();choose(+el.dataset.i)}));
+  const pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
+  close();
+  if(!pool.length){
+   if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
+   return}
+  box=document.createElement('div');box.className='combo';
+  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
+  insert();
+  box.querySelectorAll('.combo-it').forEach(el=>{
+   el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
  };
- input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');
- input.addEventListener('keydown',e=>{
-  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
-   if(!box)open();if(pool.length){e.preventDefault();activeIndex=e.key==='ArrowDown'?(activeIndex+1)%pool.length:(activeIndex<=0?pool.length-1:activeIndex-1);paintActive()}return;
-  }
-  if(e.key==='Enter'&&box&&activeIndex>=0){e.preventDefault();choose(activeIndex);return}
-  if(e.key==='Tab'&&box&&activeIndex>=0){choose(activeIndex);return}
-  if(e.key==='Escape'&&box){e.preventDefault();close();return}
- });
- input.addEventListener('input',open);input.addEventListener('focus',open);input.addEventListener('blur',()=>setTimeout(close,160));
+ input.addEventListener('input',open);
+ input.addEventListener('focus',open);
+ input.addEventListener('blur',()=>setTimeout(close,160));
 }
 
 function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
@@ -1672,8 +1664,7 @@ name: id === '__na'
             </div>
           </div>`;
       }
-
-      const gmx = Math.max(1, ...arr.map(val));
+ const gmx = Math.max(1, ...arr.map(val));
 
       body += arr.length
         ? arr.map(a => {
@@ -1795,40 +1786,53 @@ function vReportCollection(){setTop('Collection Analysis');setActiveNav('r/colle
  const key='collection';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
   const recs=RECEIPTS().filter(x=>inR(x.date,f,t)),invP=SALES().filter(d=>inR(d.date,f,t)&&+d.paid>0);
   const total=sum(recs,x=>x.amount)+sum(invP,d=>+d.paid);
-  let body='';const tab=r.tab;
+  const normMode=x=>String(x||'').trim()||'Mode not recorded';
+  const modeRows={};
+  const addMode=(mode,amount)=>{const m=normMode(mode);modeRows[m]=(modeRows[m]||0)+(Number(amount)||0)};
+  recs.forEach(x=>addMode(x.mode,x.amount));invP.forEach(x=>addMode(x.payMode,+x.paid));
   const dayTotal=d=>sum(recs.filter(x=>x.date===d),x=>x.amount)+sum(invP.filter(x=>x.date===d),x=>+x.paid);
+  let body='';const tab=r.tab;
   if(tab==='date'){const dates=[...new Set([...recs.map(x=>x.date),...invP.map(d=>d.date)])].sort();
    const mx=Math.max(1,...dates.map(dayTotal));
    body=dates.length?dates.slice().reverse().map(d=>{const a=sum(recs.filter(x=>x.date===d),x=>x.amount),b=sum(invP.filter(x=>x.date===d),x=>+x.paid);
     return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">receipts ${money(a)} · with invoices ${money(b)}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--green)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('down','No collections in this period')}
-  else{const g=groupBy([...recs.map(x=>({pid:x.partyId,amt:x.amount})),...invP.map(d=>({pid:d.partyId,amt:+d.paid}))],'pid');
+  else if(tab==='party'){const g=groupBy([...recs.map(x=>({pid:x.partyId,amt:+x.amount||0})),...invP.map(d=>({pid:d.partyId,amt:+d.paid||0}))],'pid');
    const arr=Object.keys(g).map(k=>({p:partyById(k),amt:sum(g[k],x=>x.amt)})).filter(x=>x.p).sort((a,b)=>b.amt-a.amt);
    body=arr.length?arr.map(x=>barRow(x.p.name,x.p.type,x.amt,arr[0].amt,'var(--green)')).join(''):emptyHtml('users','No collections in this period')}
+  else {const arr=Object.keys(modeRows).map(name=>({name,amt:modeRows[name]})).sort((a,b)=>b.amt-a.amt),mx=Math.max(1,...arr.map(x=>x.amt));
+   body=arr.length?arr.map(x=>barRow(x.name,`${total?((x.amt/total)*100).toFixed(1):'0.0'}% of collections`,x.amt,mx,'var(--green)')).join(''):emptyHtml('wallet','No collection modes recorded')}
+  const journalNote='<p class="muted" style="font-size:12px;margin-top:10px">Journal entries are not included in cash collection totals. This version does not currently contain a journal-entry module; no journal amounts have been inferred.</p>';
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Collection Analysis</div><div class="psub">Money in · ${fmtDate(f)} → ${fmtDate(t)}</div></div></div>
   ${rangeBar(key)}
   <div class="sumrow">${sumTile('Total collected',money(total),'var(--green)')}${sumTile('Receipts',money(sum(recs,x=>x.amount)))}${sumTile('With invoices',money(sum(invP,d=>+d.paid)))}</div>
-  ${tabsHtml(key,r.tab,[['date','Date-wise'],['party','Party-wise']])}
-  <div class="card cardpad">${body}</div>`;
+  ${tabsHtml(key,r.tab,[['date','Date-wise'],['party','Party-wise'],['mode','Mode-wise']])}
+  <div class="card cardpad">${body}</div>${tab==='mode'?journalNote:''}`;
   bindRange(key);bindTabs(key)};
  draw()}
 function vReportPayment(){setTop('Payment Analysis');setActiveNav('r/payment');S.report.payment=S.report.payment||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='payment';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
   const pays=PAYMENTS().filter(x=>inR(x.date,f,t)),purP=PURCHASES().filter(d=>inR(d.date,f,t)&&+d.paid>0),src=SRET().filter(d=>inR(d.date,f,t)&&d.settle==='cash');
   const total=sum(pays,x=>x.amount)+sum(purP,d=>+d.paid)+sum(src,d=>d.cashAmount);
-  let body='';const tab=r.tab;
+  const normMode=x=>String(x||'').trim()||'Mode not recorded';
+  const modeRows={};const addMode=(mode,amount)=>{const m=normMode(mode);modeRows[m]=(modeRows[m]||0)+(Number(amount)||0)};
+  pays.forEach(x=>addMode(x.mode,x.amount));purP.forEach(x=>addMode(x.payMode,+x.paid));src.forEach(x=>addMode(x.payMode||x.mode,x.cashAmount));
   const dayTotal=d=>sum(pays.filter(x=>x.date===d),x=>x.amount)+sum(purP.filter(x=>x.date===d),x=>+x.paid)+sum(src.filter(x=>x.date===d),x=>x.cashAmount);
+  let body='';const tab=r.tab;
   if(tab==='date'){const dates=[...new Set([...pays.map(x=>x.date),...purP.map(d=>d.date),...src.map(d=>d.date)])].sort();
    const mx=Math.max(1,...dates.map(dayTotal));
    body=dates.length?dates.slice().reverse().map(d=>{const a=sum(pays.filter(x=>x.date===d),x=>x.amount),b=sum(purP.filter(x=>x.date===d),x=>+x.paid),c=sum(src.filter(x=>x.date===d),x=>x.cashAmount);
     return `<div class="brow"><div><span class="bname">${fmtDate(d)}</span><span class="bsub">payments ${money(a)} · with invoices ${money(b)}${c?' · customer refund '+money(c):''}</span></div><div class="btrack"><i style="width:${dayTotal(d)/mx*100}%;background:var(--red)"></i></div><div class="bv">${money(dayTotal(d))}</div></div>`}).join(''):emptyHtml('up','No payments in this period')}
-  else{const g=groupBy([...pays.map(x=>({pid:x.partyId,amt:x.amount})),...purP.map(d=>({pid:d.partyId,amt:+d.paid}))],'pid');
+  else if(tab==='party'){const g=groupBy([...pays.map(x=>({pid:x.partyId,amt:+x.amount||0})),...purP.map(d=>({pid:d.partyId,amt:+d.paid||0})),...src.map(d=>({pid:d.partyId,amt:+d.cashAmount||0}))],'pid');
    const arr=Object.keys(g).map(k=>({p:partyById(k),amt:sum(g[k],x=>x.amt)})).filter(x=>x.p).sort((a,b)=>b.amt-a.amt);
    body=arr.length?arr.map(x=>barRow(x.p.name,x.p.type,x.amt,arr[0].amt,'var(--red)')).join(''):emptyHtml('users','No payments in this period')}
+  else {const arr=Object.keys(modeRows).map(name=>({name,amt:modeRows[name]})).sort((a,b)=>b.amt-a.amt),mx=Math.max(1,...arr.map(x=>x.amt));
+   body=arr.length?arr.map(x=>barRow(x.name,`${total?((x.amt/total)*100).toFixed(1):'0.0'}% of payments`,x.amt,mx,'var(--red)')).join(''):emptyHtml('wallet','No payment modes recorded')}
+  const journalNote='<p class="muted" style="font-size:12px;margin-top:10px">Journal entries are excluded from cash/bank payment totals. This version does not currently contain a journal-entry module; no journal amounts have been inferred.</p>';
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Payment Analysis</div><div class="psub">Money out · ${fmtDate(f)} → ${fmtDate(t)}</div></div></div>
   ${rangeBar(key)}
   <div class="sumrow">${sumTile('Total paid',money(total),'var(--red)')}${sumTile('Payments',money(sum(pays,x=>x.amount)))}${sumTile('With invoices',money(sum(purP,d=>+d.paid)))}${sumTile('Customer refunds',money(sum(src,d=>d.cashAmount)))}</div>
-  ${tabsHtml(key,r.tab,[['date','Date-wise'],['party','Party-wise']])}
-  <div class="card cardpad">${body}</div>`;
+  ${tabsHtml(key,r.tab,[['date','Date-wise'],['party','Party-wise'],['mode','Mode-wise']])}
+  <div class="card cardpad">${body}</div>${tab==='mode'?journalNote:''}`;
   bindRange(key);bindTabs(key)};
  draw()}
 function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.report.profit=S.report.profit||{preset:'month',tab:'date',...mk(presetRange('month'))};
@@ -2203,6 +2207,10 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
        <button class="btn btn-ghost" id="seedBtn">${ic('layers',16)}Load sample data</button>
        ${can.wipe(u)?`<button class="btn btn-ghost" id="wipeBtn" style="color:var(--red)">${ic('trash',16)}Wipe everything</button>`:''}
      </div></div></div>
+   <div class="card" style="margin-bottom:14px"><div class="cardhead"><span class="lbl">Mobile app icon</span></div><div class="cardpad">
+     <p class="muted" style="font-size:13px;margin-bottom:12px">Download a 512 × 512 PNG icon to your phone or computer. On some mobile browsers, use the image preview’s Share or Save Image option if direct download is unavailable.</p>
+     <button class="btn btn-ghost" id="downloadPwaIcon">${ic('down',16)}Download PWA icon (PNG)</button>
+   </div></div>
    <div class="card"><div class="cardhead"><span class="lbl">At a glance</span></div><div class="cardpad">
      <div class="lgrow"><span class="ld"><b>App version</b><span>${APP_VERSION}</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">Munshi</span></div>
      <div class="lgrow"><span class="ld"><b>Documents</b><span>sales · purchases · returns</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${SALES().length+PURCHASES().length+SRET().length+PRET().length}</span></div>
@@ -2213,6 +2221,17 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
    </div></div>
  </div></div>`;
  $('#stForm').onsubmit=e=>{e.preventDefault();const n=SET();n.businessName=$('#st-biz').value.trim()||n.businessName;n.currency=$('#st-cur').value.trim()||'₹';n.currencyWord=$('#st-cw').value.trim();n.phone=$('#st-ph').value.trim();n.address=$('#st-ad').value.trim();saveSet(n);toast('Settings saved — live on all devices')};
+ const iconBtn=$('#downloadPwaIcon');if(iconBtn)iconBtn.onclick=()=>{
+  try{
+   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;const ctx=canvas.getContext('2d');
+   ctx.fillStyle='#0F2A1F';ctx.fillRect(0,0,512,512);
+   const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()};
+   ctx.fillStyle='#D9A441';rr(76,76,360,360,78);ctx.fill();
+   ctx.fillStyle='#0F2A1F';ctx.font='800 260px system-ui, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('M',256,270);
+   const dataUrl=canvas.toDataURL('image/png');const a=document.createElement('a');a.href=dataUrl;a.download='munshi-pwa-icon-512.png';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+   toast('PWA icon download started. If it opens instead, use Share / Save Image.');
+  }catch(err){toast('Could not create icon on this browser. Please try another browser.','err')}
+ };
  $('#expBtn').onclick=async()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES()};
   try{const lg=await DB.collection('logins').get();data.logins=lg.docs.map(d=>Object.assign({id:d.id},d.data()))}catch(e){}
   const b=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='munshi-backup-'+todayISO()+'.json';a.click();toast('Backup downloaded')};
