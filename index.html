@@ -311,17 +311,6 @@ body.locked{overflow:hidden}
 .ptot .tr{display:flex;justify-content:space-between;padding:4px 0}
 .ptot .g{border-top:2px solid #111;font-weight:700;font-size:15px}
 .pwords{margin-top:14px;font-size:12.5px;border:1px dashed #999;padding:9px 11px;border-radius:6px}
-/* Pagination for large lists */
-.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid var(--line);background:#fff}
-.pager .pginfo{font:500 11px var(--mono);color:var(--ink2)}
-.pager .pgbuttons{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.pager .pgbtn{border:1px solid var(--line2);background:#fff;border-radius:8px;padding:6px 10px;font:600 12px var(--disp)}
-.pager .pgbtn:disabled{opacity:.35;cursor:not-allowed}
-.pager .pgsize{width:auto;padding:5px 8px;font-size:12px}
-.subcat-note{font-size:11px;color:var(--ink2);margin-top:4px}
-/* ===== Munshi v3.8 upgrade ===== */
-.lastRateHint{font:500 11px var(--mono);color:var(--green);margin-top:4px}
-.lastRateHint b{font-weight:700}
 </style>
 </head>
 <body>
@@ -331,23 +320,8 @@ body.locked{overflow:hidden}
 <div id="toastRoot"></div>
 <div id="printArea"></div>
 
-
-
-
-
 <script>
 'use strict';
-/* ==================================================================
-   MUNSHI v3.8 — merged full source
-   Applied fixes: deduped combo-key handler · cached SET() · single-pass
-   stock engine (stockOf/avgCost/stockRows) · pulse chart measured after
-   DOM insert · adminResetPw re-points customer orders · journal vouchers
-   in partyEntries + balancesMap · numWords(0) · neutral login notice ·
-   backup includes expenses/expenseHeads/journals/regRequests · resize
-   handler chained · vCats/vBrands/openStockModal/openItemModal included.
-   SECURITY: rotate the Firebase apiKey (it was shared) and lock it to
-   your domain + enable App Check. Firestore rules are the real boundary.
-   ================================================================== */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyBFuvEGEhc7vC2j6XgH9bb6PnR-NjIfwDo",
   authDomain:"munshi-91aa9.firebaseapp.com",
@@ -356,9 +330,9 @@ const FIREBASE_CONFIG={
   messagingSenderId:"369936746338",
   appId:"1:369936746338:web:85e719b3dab31d94074e3b"
 };
-const APP_VERSION='v3.8';
+/* Setup key is stored as a SHA-256 hash in Firestore (collection 'setup', doc 'key', field 'hash') — never in this file. */
+const APP_VERSION='v3.6';
 
-/* ---------------- core helpers ---------------- */
 const $=s=>document.querySelector(s), V=()=>$('#view'), qsa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -373,16 +347,12 @@ function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');ret
 function timeAgo(ts){const s=(Date.now()-(+ts||0))/1000;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 function normMobile(v){let d=String(v||'').replace(/\D/g,'');if(d.length>10&&d.startsWith('91'))d=d.slice(-10);if(d.length===11&&d.startsWith('0'))d=d.slice(1);return d}
 const validMobile=d=>/^\d{10}$/.test(d);
-let _scfg,_scnt,_scache;
-function SET(){if(_scfg!==state.settings||_scnt!==state.counters){_scfg=state.settings;_scnt=state.counters;
- _scache=Object.assign({},{businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:''},state.settings||{});
- _scache.counters=state.counters||{}}return _scache}
 const money=n=>{n=+n;if(!isFinite(n))n=0;const neg=n<-0.004,cur=SET().currency||'₹',loc=(cur==='₹'||/^Rs/.test(cur))?'en-IN':'en-US';return (neg?'-':'')+cur+Math.abs(n).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2})};
 function compact(n){n=Math.abs(+n||0);if(!isFinite(n))n=0;const cur=SET().currency||'₹';if(n>=1e7)return cur+(n/1e7).toFixed(1)+'Cr';if(n>=1e5)return cur+(n/1e5).toFixed(1)+'L';if(n>=1e3)return cur+(n/1e3).toFixed(1)+'k';return cur+Math.round(n)}
 function numWords(n){n=Math.round(+n||0);const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'],b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
  const two=t=>t<20?a[t]:b[Math.floor(t/10)]+(t%10?' '+a[t%10]:'');
  const three=x=>Math.floor(x/100)?a[Math.floor(x/100)]+' Hundred'+(x%100?' '+two(x%100):''):two(x);
- if(!n)return 'Zero Only';let s='',cr=Math.floor(n/1e7);n%=1e7;const lk=Math.floor(n/1e5);n%=1e5;const th=Math.floor(n/1e3);n%=1e3;
+ if(!n)return 'Zero';let s='',cr=Math.floor(n/1e7);n%=1e7;const lk=Math.floor(n/1e5);n%=1e5;const th=Math.floor(n/1e3);n%=1e3;
  if(cr)s+=three(cr)+' Crore ';if(lk)s+=three(lk)+' Lakh ';if(th)s+=three(th)+' Thousand ';if(n)s+=three(n);
  return s.trim()+' Only'}
 async function sha256hex(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -392,6 +362,28 @@ function copyText(t){const fb=()=>{const ta=document.createElement('textarea');t
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('Copied'),fb);else fb()}
 const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['#E7ECEF','#33586B'],['#EFE9F4','#5B4B7A'],['#EAF2E4','#4E6B2A']];
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
+
+function attachCombo(input,opts){
+ let box=null;
+ const close=()=>{if(box){box.remove();box=null}};
+ const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
+ const open=()=>{
+  const q=(input.value||'').trim().toLowerCase();
+  const pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
+  close();
+  if(!pool.length){
+   if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
+   return}
+  box=document.createElement('div');box.className='combo';
+  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
+  insert();
+  box.querySelectorAll('.combo-it').forEach(el=>{
+   el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
+ };
+ input.addEventListener('input',open);
+ input.addEventListener('focus',open);
+ input.addEventListener('blur',()=>setTimeout(close,160));
+}
 
 function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
  const host=document.getElementById('view');
@@ -415,10 +407,9 @@ async function photoDataUrl(file){let d=await resizeImage(file,640,.72);
 function itemThumb(it,size=38){if(it&&it.photo)return `<img class="imthumb" src="${it.photo}" style="width:${size}px;height:${size}px" alt="">`;
  return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:9px">${esc((it&&it.name?it.name:'?')[0]||'?')}</span>`}
 
-/* ---------------- data layer ---------------- */
 let auth=null,DB=null;
-const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],regReqs:[],expenses:[],expenseHeads:[],journals:[],settings:null,counters:null,myParty:null};
-const COLLECTION_KEYS=['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites','expenses','expenseHeads','journals'];
+const state={users:[],parties:[],categories:[],brands:[],items:[],sales:[],purchases:[],saleReturns:[],purchaseReturns:[],receipts:[],payments:[],orders:[],stockAdj:[],pwResets:[],invites:[],regReqs:[],settings:null,counters:null,myParty:null};
+const COLLECTION_KEYS=['users','parties','categories','brands','items','sales','purchases','saleReturns','purchaseReturns','receipts','payments','orders','stockAdj','pwResets','invites'];
 const LS={get(k,d){try{const v=localStorage.getItem('munshi_'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){localStorage.setItem('munshi_'+k,JSON.stringify(v))},del(k){localStorage.removeItem('munshi_'+k)}};
 const USERS=()=>state.users||[],PARTIES=()=>state.parties||[],CATS=()=>state.categories||[],BRANDS=()=>state.brands||[],ITEMS=()=>state.items||[];
 const SALES=()=>state.sales||[],PURCHASES=()=>state.purchases||[],SRET=()=>state.saleReturns||[],PRET=()=>state.purchaseReturns||[],RECEIPTS=()=>state.receipts||[],PAYMENTS=()=>state.payments||[];
@@ -428,10 +419,11 @@ function dbUpdate(c,id,p){const d=Object.assign({},p);delete d.id;DB.collection(
 function dbDel(c,id){DB.collection(c).doc(id).delete().catch(e=>{console.error('del',c,e);toast('Delete failed: '+e.code,'err')})}
 function dbGet(c,id){return (state[c]||[]).find(x=>x.id===id)}
 const itemById=id=>ITEMS().find(i=>i.id===id),partyById=id=>{const p=PARTIES().find(p=>p.id===id);if(p)return p;return (S.me&&S.me.role==='customer'&&S.me.partyId===id)?state.myParty:null},catById=id=>CATS().find(c=>c.id===id),brandById=id=>BRANDS().find(b=>b.id===id);
+function SET(){const base={businessName:'Munshi Traders',currency:'₹',currencyWord:'Rupees',phone:'',address:''};const cfg=state.settings||{};const c=Object.assign({},base,cfg);c.counters=state.counters||{};return c}
 function saveSet(s){const d={businessName:s.businessName,currency:s.currency,currencyWord:s.currencyWord,phone:s.phone,address:s.address,welcomed:!!s.welcomed};state.settings=Object.assign({},state.settings,d);DB.collection('settings').doc('config').set(d,{merge:true}).catch(e=>toast('Save failed: '+e.code,'err'))}
 async function nextNo(pre){const ref=DB.collection('settings').doc('counters');
  const n=await DB.runTransaction(async t=>{const s=await t.get(ref);const c=(s.exists&&s.data()[pre])||0;t.set(ref,{[pre]:c+1},{merge:true});return c+1});
- state.counters=Object.assign({},state.counters||{},{[pre]:n});return pre+'-'+String(n).padStart(4,'0')}
+ if(state.counters)state.counters[pre]=n;return pre+'-'+String(n).padStart(4,'0')}
 function nextPreview(pre){const c=(state.counters||{})[pre]||0;return pre+'-'+String(c+1).padStart(4,'0')}
 function session(){return S.me}
 function logout(){S.unsubs.forEach(u=>{try{u()}catch(e){}});S.unsubs=[];closeSheet();closeModal();auth.signOut().catch(()=>{});S.me=null;go('login')}
@@ -487,56 +479,39 @@ async function createAuthUser(email,pw){
  const app2=firebase.apps.find(a=>a.name==='secondary')||firebase.initializeApp(FIREBASE_CONFIG,'secondary');
  const a2=app2.auth();
  try{await a2.setPersistence(firebase.auth.Auth.Persistence.NONE)}catch(e){}
- try{
-  const cred=await a2.createUserWithEmailAndPassword(email,pw);
-  try{await a2.signOut()}catch(e){}
-  return {uid:cred.user.uid,email};
- }catch(ex){
-  if(ex.code!=='auth/email-already-in-use')throw ex;
-  const suffix=Math.random().toString(36).slice(2,8);
-  const alt=email.replace('@','.'+suffix+'@');
-  const cred=await a2.createUserWithEmailAndPassword(alt,pw);
-  try{await a2.signOut()}catch(e){}
-  return {uid:cred.user.uid,email:alt};
- }}
+ const cred=await a2.createUserWithEmailAndPassword(email,pw);
+ const uidOut=cred.user.uid;
+ try{await a2.signOut()}catch(e){}
+ return uidOut}
 async function changeMyPw(curPw,newPw){const u=auth.currentUser;
- if(!u)throw new Error('not signed in');
  const cred=firebase.auth.EmailAuthProvider.credential(u.email,curPw);
  await u.reauthenticateWithCredential(cred);await u.updatePassword(newPw)}
 async function adminResetPw(user,newPw){
- const mobile=user.mobile,suffix=Math.random().toString(36).slice(2,8);
- const res=await createAuthUser(mobile+'.'+suffix+'@munshi.app',newPw),newUid=res.uid;
+ const mobile=user.mobile;
+ const suffix=Math.random().toString(36).slice(2,8);
+ const newEmail=mobile+'.'+suffix+'@munshi.app';
+ const newUid=await createAuthUser(newEmail,newPw);
  const batch=DB.batch();
  const ud={name:user.name,mobile,role:user.role,active:user.active!==false,created:user.created||Date.now()};
  if(user.partyId)ud.partyId=user.partyId;
  batch.set(DB.collection('users').doc(newUid),ud);
  batch.delete(DB.collection('users').doc(user.id));
- batch.set(DB.collection('logins').doc(mobile),{email:res.email});
+ batch.set(DB.collection('logins').doc(mobile),{email:newEmail});
  await batch.commit();
- try{ /* FIX: re-point customer orders to the new uid so history survives a reset */
-  const os=await DB.collection('orders').where('userId','==',user.id).get();
-  if(!os.empty){const b2=DB.batch();os.docs.forEach(d=>b2.update(d.ref,{userId:newUid}));await b2.commit()}
- }catch(e){console.error('order re-point failed',e)}
  return newUid}
 
-/* ---- stock engine: single-pass, cached per data snapshot ---- */
-let _smRefs=null,_smMap=null;
-function buildStockMap(){
- const refs=[state.items,state.purchases,state.sales,state.purchaseReturns,state.saleReturns,state.stockAdj];
- if(_smMap&&_smRefs&&refs.length===_smRefs.length&&refs.every((r,i)=>r===_smRefs[i]))return _smMap;
- const m={};
- ITEMS().forEach(i=>{m[i.id]={q:+i.openingStock||0,qa:+i.openingStock||0,v:(+i.openingStock||0)*((+i.openingRate)||(+i.purchaseRate)||0)}});
- PURCHASES().forEach(d=>LINES(d).forEach(l=>{const r=m[l.itemId];if(!r)return;const q=+l.qty||0;r.q+=q;r.qa+=q;r.v+=q*(+l.rate||0)}));
- SALES().forEach(d=>LINES(d).forEach(l=>{const r=m[l.itemId];if(r)r.q-=+l.qty||0}));
- PRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{const r=m[l.itemId];if(r)r.q-=+l.qty||0})});
- SRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{const r=m[l.itemId];if(r)r.q+=+l.qty||0})});
- ADJ().forEach(a=>{const r=a&&m[a.itemId];if(!r)return;const d=+a.delta||0;r.q+=d;if(d>0&&+a.rate){r.qa+=d;r.v+=d*(+a.rate)}});
- _smRefs=refs;_smMap=m;return m}
-function stockOf(id){const r=buildStockMap()[id];return r?r.q:0}
-function avgCost(it){const r=it&&buildStockMap()[it.id];
- return r&&r.qa>0?r.v/r.qa:((+(it&&it.purchaseRate))||(+(it&&it.openingRate))||0)}
-function stockRows(){const m=buildStockMap();
- return ITEMS().map(it=>{const r=m[it.id]||{q:0};const ac=avgCost(it);return{it,qty:r.q,ac,value:r.q*ac}}).sort((a,b)=>b.value-a.value)}
+function stockOf(itemId){let q=+(itemById(itemId)?.openingStock)||0;
+ PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q+=(+l.qty||0)}));
+ SALES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)}));
+ PRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{if(l.itemId===itemId)q-=(+l.qty||0)})});
+ SRET().forEach(d=>{if(d.goodsBack!==false)LINES(d).forEach(l=>{if(l.itemId===itemId)q+=(+l.qty||0)})});
+ ADJ().forEach(a=>{if(a&&a.itemId===itemId)q+=(+a.delta||0)});
+ return q}
+function avgCost(it){let q=+(it.openingStock)||0,v=q*(+(it.openingRate)||+(it.purchaseRate)||0);
+ PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId===it.id){q+=(+l.qty||0);v+=(+l.qty||0)*(+l.rate||0)}}));
+ ADJ().forEach(a=>{if(a&&a.itemId===it.id&&+a.delta>0&&+a.rate)v+=(+a.delta)*(+a.rate),q+=(+a.delta)});
+ return q>0?v/q:((+(it.purchaseRate))||(+(it.openingRate))||0)}
+function stockRows(){return ITEMS().map(it=>{const qty=stockOf(it.id);return{it,qty,ac:avgCost(it),value:qty*avgCost(it)}}).sort((a,b)=>b.value-a.value)}
 function docSub(d){return sum(LINES(d),l=>(+l.qty||0)*(+l.rate||0))}
 function saleLinesOf(invs){const rows=[];(invs||[]).forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const g=(+l.qty||0)*(+l.rate||0);rows.push({itemId:l.itemId,qty:+l.qty||0,gross:g,net:g-((+d.discount||0)*(sub?g/sub:0)),date:d.date})})});return rows}
 function purchaseLinesOf(docs){const rows=[];(docs||[]).forEach(d=>LINES(d).forEach(l=>rows.push({itemId:l.itemId,qty:+l.qty||0,amt:(+l.qty||0)*(+l.rate||0),date:d.date})));return rows}
@@ -548,23 +523,9 @@ function partyEntries(pid){const es=[];const p=partyById(pid);if(!p)return es;
  PRET().filter(d=>d.partyId===pid).forEach(d=>{if(d.settle==='credit')es.push({date:d.date,desc:'Purchase Return'+(d.goodsBack!==false?'':' (credit only)'),ref:d.no,dr:+d.total,cr:0,pr:3,_c:d.created,link:'purchase-returns/view/'+d.id});else es.push({date:d.date,desc:'Purchase Return — cash settled',ref:d.no,dr:0,cr:0,pr:3,_c:d.created,memo:true})});
  RECEIPTS().filter(r=>r.partyId===pid).forEach(r=>es.push({date:r.date,desc:'Cash received',ref:r.mode,dr:0,cr:+r.amount,pr:4,_c:r.created}));
  PAYMENTS().filter(r=>r.partyId===pid).forEach(r=>es.push({date:r.date,desc:'Cash paid',ref:r.mode,dr:+r.amount,cr:0,pr:4,_c:r.created}));
- (state.journals||[]).forEach(j=>{
-  if(j.creditPartyId===pid){const o=partyById(j.debitPartyId);es.push({date:j.date,desc:'Journal — paid '+(o?o.name:'other party')+' directly on our behalf',ref:j.no||'',dr:0,cr:+j.amount,pr:4,_c:j.created||0})}
-  if(j.debitPartyId===pid){const o=partyById(j.creditPartyId);es.push({date:j.date,desc:'Journal — received from '+(o?o.name:'other party')+' on our behalf',ref:j.no||'',dr:+j.amount,cr:0,pr:4,_c:j.created||0})}});
  return es.sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')||a.pr-b.pr||(a._c||0)-(b._c||0))}
 function partyBalance(pid){return sum(partyEntries(pid),e=>e.dr-e.cr)}
-function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
- const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
- SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
- PURCHASES().forEach(d=>{add(d.partyId,-(+d.total));if(+d.paid)add(d.partyId,+d.paid)});
- SRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,-(+d.total))});
- PRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,+d.total)});
- RECEIPTS().forEach(r=>add(r.partyId,-(+r.amount)));
- PAYMENTS().forEach(r=>add(r.partyId,+r.amount));
- (state.journals||[]).forEach(j=>{if(j.creditPartyId)add(j.creditPartyId,-(+j.amount||0));if(j.debitPartyId)add(j.debitPartyId,+(+j.amount||0))});
- return m}
 
-/* ---------------- icons, nav, doc meta ---------------- */
 const ICONS={
 home:'<path d="M3 10.8 12 3.5l9 7.3"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.8 20v-5.5h4.4V20"/>',
 bag:'<path d="M5.5 8h13l-1 12.5h-11L5.5 8Z"/><path d="M8.8 10.5V6.8a3.2 3.2 0 0 1 6.4 0v3.7"/>',
@@ -612,92 +573,6 @@ const NAVG=[
 const navItems=u=>u.role==='company'?[{g:'',items:[['dash','Home','home'],['r/stock','Stock Valuation','box']]}]:NAVG.map(g=>({...g,items:g.items.filter(it=>!it[3]||RANK[u.role]>=it[3])})).filter(g=>g.items.length);
 const CNAV=[['shop','Shop','bag'],['my-orders','My Orders','order'],['cart','Cart','cart'],['account','Account','user']];
 
-/* ---------------- keyboard layer (desktop) ---------------- */
-const KB={open:false,combo:null,comboItems:[],comboPick:null,comboIndex:-1,comboInput:null};
-function kbHelp(){openSheet(`<div class="shhead"><b>Keyboard shortcuts</b><button class="icon-btn" data-close-sheet>${ic('x')}</button></div>
- <div class="shg"><span class="lbl">Global</span>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">N</b> New Sale Invoice</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">P</b> New Purchase Invoice</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">C</b> New Collection</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Y</b> New Payment</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">O</b> Orders</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">I</b> Items</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">T</b> Stock Valuation</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">L</b> Ledger</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">D</b> Dashboard</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">/</b> Focus search box on this page</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Shift + ?</b> This help</div>
- </div>
- <div class="shg"><span class="lbl">In forms & search</span>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Tab</b> Dropdown open: select highlighted item + go to next field</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">↑ ↓</b> Pick from live suggestions</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Enter</b> Confirm selection</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Esc</b> Close suggestion list first, then dialogs/sheets</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">[ / ]</b> From date / To date -1 day</div>
-  <div class="shlink" style="cursor:default"><b style="font-family:var(--mono);min-width:110px">Ctrl + S</b> Save the open form</div>
- </div><div style="height:10px"></div>`)}
-
-function kbComboHighlight(){const its=KB.comboItems;if(!its.length)return;
- its.forEach(el=>el.style.background='');
- if(KB.comboIndex<0)return;
- const el=its[KB.comboIndex];if(!el)return;
- el.style.background='var(--paper)';
- if(el.scrollIntoView)el.scrollIntoView({block:'nearest'})}
-
-function kbComboKey(e){
- if(!KB.combo||!KB.comboItems.length)return false;
- const pickIdx=()=>{if(KB.comboIndex<0)KB.comboIndex=0;const el=KB.comboItems[KB.comboIndex];if(el&&KB.comboPick)KB.comboPick(+el.dataset.i)};
- if(e.key==='ArrowDown'){e.preventDefault();KB.comboIndex=(KB.comboIndex+1)%KB.comboItems.length;kbComboHighlight();return true}
- if(e.key==='ArrowUp'){e.preventDefault();KB.comboIndex=(KB.comboIndex-1+KB.comboItems.length)%KB.comboItems.length;kbComboHighlight();return true}
- if(e.key==='Enter'){e.preventDefault();pickIdx();return true}
- if(e.key==='Tab'){e.preventDefault();pickIdx();
-  const inp=KB.comboInput;setTimeout(()=>{if(!inp)return;
-   const f=[...document.querySelectorAll('input,select,textarea,button')].filter(x=>!x.disabled&&x.offsetParent!==null);
-   const idx=f.indexOf(inp);if(idx>-1&&f[idx+1])f[idx+1].focus()},0);return true}
- if(e.key==='Escape'){e.preventDefault();KB.comboIndex=-1;if(KB.combo){KB.combo.remove();KB.combo=null}KB.comboItems=[];return true}
- return false}
-
-document.addEventListener('keydown',e=>{
- const tgt=e.target||{};
- const tag=(tgt.tagName||'').toUpperCase();
- const typing=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||tgt.isContentEditable);
- /* combo navigation first — dropdown keys win over global keys (FIX: single check, dup removed) */
- if(KB.combo&&KB.comboItems.length&&kbComboKey(e))return;
- if(e.key==='Escape'){
-  if($('#sheetRoot').innerHTML){closeSheet();return}
-  if($('#modalRoot').innerHTML){closeModal();return}
-  return}
- if(e.key==='Tab')return;
- if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){
-  const f=document.querySelector('#docForm,#mfForm,#stForm,#imForm,#pmForm,#saForm,#cmForm,#bmForm,#rpForm,#apForm,#nuForm,#ncForm,#pwForm,#rgForm,#skForm,#suForm,#jcForm,#jf,#fgForm,#authForm');
-  if(f){e.preventDefault();f.requestSubmit?f.requestSubmit():f.submit()}return}
- if((e.key==='['||e.key===']')&&!typing){
-  const f=V().querySelector('.rfrom'),t2=V().querySelector('.rto'),df=document.querySelector('#dcFrom'),dt=document.querySelector('#dcTo');
-  const el=e.key==='['?(f||df):(t2||dt);
-  if(el&&el.value){e.preventDefault();const d=new Date(el.value+'T00:00:00');d.setDate(d.getDate()-1);
-   el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-   el.dispatchEvent(new Event('change'))}
-  return}
- if(typing||e.ctrlKey||e.metaKey||e.altKey)return;
- if($('#modalRoot').innerHTML||$('#sheetRoot').innerHTML)return;
- const me=S.me;if(!me)return;
- if(me.role==='customer')return;
- const k=e.key.toLowerCase();
- const go2=p=>{e.preventDefault();go(p)};
- if(k==='n')return go2('sales/new');
- if(k==='p')return go2('purchases/new');
- if(k==='c')return go2('collections/new');
- if(k==='y')return go2('payments/new');
- if(k==='o')return go2('orders');
- if(k==='i')return go2('items');
- if(k==='t')return go2('r/stock');
- if(k==='l')return go2('ledger');
- if(k==='d')return go2('dash');
- if(e.key==='/'){e.preventDefault();const s=V().querySelector('.searchbar input,.searchbar .in');if(s){s.focus();if(s.select)s.select()}return}
- if(e.key==='?'){e.preventDefault();kbHelp();return}
-});
-
-/* ---------------- toasts, modals, sheets ---------------- */
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.innerHTML=ic(type==='err'?'alert':'check',16)+esc(msg);$('#toastRoot').appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),320)},2600)}
 function openModal(html){$('#modalRoot').innerHTML=`<div class="mask" id="mMask"><div class="modal">${html}</div></div>`;document.body.classList.add('locked');$('#mMask').addEventListener('click',e=>{if(e.target.id==='mMask')closeModal()})}
 function closeModal(){$('#modalRoot').innerHTML='';document.body.classList.remove('locked')}
@@ -710,29 +585,6 @@ const sel=(v,cur)=>v===cur?'selected':'';
 function showLoading(msg){$('#app').innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)"><div class="card cardpad" style="text-align:center;max-width:340px"><div class="mark" style="margin:0 auto 12px">M</div><b style="font:700 17px var(--disp)">Munshi</b><p class="muted" style="font-size:13px;margin-top:6px">${esc(msg||'Connecting to your books…')}</p></div></div>`}
 function renderConfigNeeded(){document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F3EC;font-family:system-ui;padding:20px"><div style="background:#fff;border:1px solid #E4E0D3;border-radius:14px;padding:28px;max-width:560px"><h1 style="font-size:20px;margin-bottom:8px">Firebase not configured yet</h1><p style="color:#555;font-size:14px;line-height:1.6">Open <b>index.html</b> and paste your Firebase config into <span style="font-family:monospace;background:#f4f2ea;padding:2px 6px;border-radius:4px">FIREBASE_CONFIG</span>.</p></div></div>`}
 
-function attachCombo(input,opts){
- let box=null;
- const close=()=>{if(box){box.remove();box=null}KB.combo=null;KB.comboItems=[];KB.comboIndex=-1};
- const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
- const open=()=>{
-  const q=(input.value||'').trim().toLowerCase();
-  const pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
-  close();
-  if(!pool.length){
-   if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
-   return}
-  box=document.createElement('div');box.className='combo';
-  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');insert();
-  KB.combo=box;KB.comboItems=[...box.querySelectorAll('.combo-it')];KB.comboIndex=-1;KB.comboPick=idx=>{const o=pool[idx];input.value=o.label;close();opts.onPick&&opts.onPick(o)};KB.comboInput=input;
-  box.querySelectorAll('.combo-it').forEach(el=>{
-   el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
- };
- input.addEventListener('input',()=>{KB.comboIndex=-1;open()});
- input.addEventListener('focus',()=>{KB.comboIndex=-1;open()});
- input.addEventListener('blur',()=>setTimeout(close,160));
-}
-
-/* ---------------- auth screens ---------------- */
 function authShell(inner){
  $('#app').innerHTML=`<div class="authwrap">
   <div class="aleft ruled-bg">
@@ -747,6 +599,7 @@ function authShell(inner){
   </div>
   <div class="aright">${inner}</div></div>`;}
 function renderLogin(){
+ const noSuper=!USERS().some(u=>u.role==='super');
  authShell(`<div class="card cardpad">
    <span class="lbl">Welcome back</span>
    <h2 style="font:700 24px var(--disp);margin:8px 0 2px">Sign in to ${esc(SET().businessName)}</h2>
@@ -757,7 +610,7 @@ function renderLogin(){
      <div id="authErr" class="notice red" style="display:none"></div>
      <button class="btn btn-primary" style="width:100%;margin-top:4px" id="authBtn">Sign in</button>
    </form>
-   <div class="notice" style="margin-top:16px">${ic('alert',15)}<div>Business owner or admin? <a href="#/setup" style="font-weight:700">Manage setup →</a> (setup key required)</div></div>
+   ${noSuper?`<div class="notice" style="margin-top:16px">${ic('alert',15)}<div>This business hasn't been claimed yet. Owner? <a href="#/setup" style="font-weight:700">Set up this business →</a> (setup key required)</div></div>`:''}
    <div class="authlinks"><a href="#/register">New? Register as customer</a><a href="#/join">Invited? Join with a code</a><a href="javascript:void(0)" id="forgotLink">Forgot password?</a></div>
  </div>`);
  $('#forgotLink').onclick=openForgotModal;
@@ -773,18 +626,23 @@ function openForgotModal(){openModal(`<div class="mhead"><h3>Reset password requ
  <form id="fgForm"><div class="field"><label class="fl">Registered mobile number</label><input class="in" id="fg-mob" inputmode="numeric" required placeholder="10-digit mobile"></div>
  <div id="fgErr" class="notice red" style="display:none"></div>
  <button class="btn btn-primary" style="width:100%">Send request to admin</button></form></div>`);
- $('#fgForm').onsubmit=async e=>{e.preventDefault();const m=normMobile($('#fg-mob').value);
-  let exists=false;try{exists=(await DB.collection('logins').doc(m).get()).exists}catch(ex){}
-  if(!exists){const n=$('#fgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>No account found with this mobile number.</span>';return}
+ $('#fgForm').onsubmit=async e=>{e.preventDefault();const m=normMobile($('#fg-mob').value),btn=$('#fgForm button[type=submit]')||$('#fgForm button');
+  const err=$('#fgErr');
+  if(!validMobile(m)){err.style.display='flex';err.innerHTML=ic('alert',15)+'<span>Enter a valid registered 10-digit mobile number.</span>';return}
+  if(btn){btn.disabled=true;btn.textContent='Sending request…'}
   try{
-   const pending=await DB.collection('pwResets').where('mobile','==',m).where('status','==','pending').limit(1).get();
-   if(!pending.empty){const n=$('#fgErr');n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>A request is already pending. Please contact the admin.</span>';return}
+   // Signed-out users must not read pwResets or logins. Firestore rules validate
+   // that the corresponding logins/{mobile} document exists before accepting this create.
    await DB.collection('pwResets').add({mobile:m,status:'pending',created:Date.now()});
-   closeModal();toast('Request sent — ask your admin for the new password')
+   closeModal();toast('Request sent to admin. Please wait for verification.');
   }catch(ex){
    console.error('Password reset request failed:',ex);
-   const n=$('#fgErr');if(n){n.style.display='flex';n.innerHTML=ic('alert',15)+'<span>Could not send request ('+esc(ex.code||ex.message||'unknown error')+'). Please contact the admin.</span>'}
-  }}}
+   err.style.display='flex';
+   const msg=ex&&ex.code==='permission-denied'?'Firebase denied this request. Ask the admin to publish the pwResets Firestore rule.':'Could not send request. Check your connection and try again.';
+   err.innerHTML=ic('alert',15)+'<span>'+esc(msg)+'</span>';
+   if(btn){btn.disabled=false;btn.textContent='Send request to admin'}
+  }
+ }}
 function renderRegister(){
  authShell(`<div class="card cardpad">
    <span class="lbl">New customer registration</span>
@@ -836,11 +694,11 @@ function renderSetup(){
   $('#skForm').onsubmit=async e=>{e.preventDefault();
    const btn=$('#skForm').querySelector('button');if(btn)btn.disabled=true;
    try{
-    let rec=null,denied=false;
+    let rec=null,dennied=false;
     try{rec=await DB.collection('setup').doc('key').get()}
-    catch(ex){denied=(ex.code==='permission-denied');rec=null}
+    catch(ex){dennied=(ex.code==='permission-denied');rec=null}
     if(!rec||!rec.exists){const n=$('#skErr');n.style.display='flex';
-     n.innerHTML=ic('alert',15)+(denied
+     n.innerHTML=ic('alert',15)+(dennied
       ?'<div>Setup is locked for this database — the business is already claimed, or the security rules for <b>setup/key</b> are not published.</div>'
       :'<div>No setup key is registered in the database yet. In Firebase Console → Firestore, create collection <b>setup</b>, document <b>key</b>, field <b>hash</b>, then try again.</div>');
      return}
@@ -949,7 +807,6 @@ function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openMod
   try{await changeMyPw($('#pw0').value,$('#pw1').value);closeModal();toast('Password updated')}
   catch(ex){err(ex.code==='auth/wrong-password'?'Current password is wrong':'Could not update: '+ex.code)}}}
 
-/* ---------------- app shell ---------------- */
 function renderShell(){
  const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
  const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
@@ -1002,7 +859,15 @@ function openAccountSheet(){const u=S.me,p=partyById(u.partyId),bal=p?partyBalan
  </div><div style="height:10px"></div>`);
  $('#acOut').onclick=logout;$('#acPw').onclick=()=>{closeSheet();openSelfPwModal()}}
 
-/* ---------------- dashboards ---------------- */
+function balancesMap(){const m={};PARTIES().forEach(p=>{m[p.id]=+p.openingBalance*(p.openingType==='cr'?-1:1)});
+ const add=(pid,amt)=>{if(m[pid]===undefined)m[pid]=0;m[pid]+=amt};
+ SALES().forEach(d=>{add(d.partyId,+d.total);if(+d.paid)add(d.partyId,-(+d.paid))});
+ PURCHASES().forEach(d=>{add(d.partyId,-(+d.total));if(+d.paid)add(d.partyId,+d.paid)});
+ SRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,-(+d.total))});
+ PRET().forEach(d=>{if(d.settle==='credit')add(d.partyId,+d.total)});
+ RECEIPTS().forEach(r=>add(r.partyId,-(+r.amount)));
+ PAYMENTS().forEach(r=>add(r.partyId,+r.amount));
+ return m}
 function countUp(el,target){const t0=performance.now(),dur=900;const step=t=>{const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=money(target*e);if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
 function dashCheckCard(){if(!S.dashCheck)S.dashCheck={preset:'month',...mk(presetRange('month'))};
  const dc=S.dashCheck;
@@ -1082,13 +947,12 @@ function vDashCompany(){
  </div>
  <div class="card" style="margin-bottom:14px">
    <div class="cardhead"><span class="lbl">Cash pulse · last 14 days</span><div class="legend"><span><i class="dot" style="background:var(--green)"></i>Sales</span><span><i class="dot" style="background:var(--red)"></i>Purchases</span></div></div>
-   <div class="cardpad chartwrap" id="pulse"></div>
+   <div class="cardpad chartwrap" id="pulse">${pulseChart()}</div>
  </div>
  ${dashCheckCard()}
  <div class="card"><div class="cardhead"><span class="lbl">Stock valuation @ cost</span><a class="btn btn-ghost btn-sm" href="#/r/stock">Full detail</a></div><div class="cardpad">
    ${topStk.length?topStk.map(x=>`<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${x.qty} pcs @ ${money(x.ac)}</span></div><div class="btrack"><i style="width:${Math.max(2,stC?x.value/stC*100:0)}%;background:var(--amber)"></i></div><div class="bv">${money(x.value)}</div></div>`).join('')+`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">Total stock @ cost</span><b style="font-size:17px">${money(stC)}</b></div>`:`<div class="muted" style="text-align:center;padding:18px 0">No stock yet.</div>`}
  </div></div>`;
- const ph=$('#pulse');if(ph)ph.innerHTML=pulseChart();
  qsa('.kpiV[data-v]').forEach(el=>countUp(el,+el.dataset.v));
  bindPulse();bindDashCheck();
 }
@@ -1163,7 +1027,7 @@ function vDash(){
  </div>
  <div class="card" style="margin-bottom:14px">
    <div class="cardhead"><span class="lbl">Cash pulse · last 14 days</span><div class="legend"><span><i class="dot" style="background:var(--green)"></i>Sales</span><span><i class="dot" style="background:var(--red)"></i>Purchases</span></div></div>
-   <div class="cardpad chartwrap" id="pulse"></div>
+   <div class="cardpad chartwrap" id="pulse">${pulseChart()}</div>
  </div>
  ${dashCheckCard()}
  <div class="dashgrid">
@@ -1183,14 +1047,12 @@ function vDash(){
  <div class="card" style="margin-top:14px"><div class="cardhead"><span class="lbl">Recent activity</span></div><div class="cardpad" style="padding-top:4px">
    ${feed.length?feed.map(d=>{const f=FM[d._t]||FM.sale,p=partyById(d.partyId);return `<div class="feedrow" data-go="${f[4]}"><span class="ftype" style="background:${f[2]};color:${f[3]}">${ic(f[0],16)}</span><div class="lmain"><div class="lname">${f[1]}${d.no?' · <span class="mono" style="font-size:12px">'+esc(d.no)+'</span>':''}</div><div class="lsub">${esc(p?p.name:'—')} · ${timeAgo(d.created||Date.now())}</div></div><div class="lright"><div class="lamt">${money(d.total||d.amount||0)}</div></div></div>`}).join(''):`<div class="muted" style="text-align:center;padding:14px 0">Transactions will appear here.</div>`}
  </div></div>`;
- const ph=$('#pulse');if(ph)ph.innerHTML=pulseChart();
  qsa('.kpiV[data-v],.posval[data-v]').forEach(el=>countUp(el,+el.dataset.v));
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
  const ob=$('#obSeed');if(ob)ob.onclick=()=>confirmBox('Load sample data?','Adds a demo month of transactions, a demo customer login (99999 00000 / 1234) and two sample orders to your books.',async()=>{await seedDemo();toast('Sample month loaded');route()});
  const of_=$('#obFresh');if(of_)of_.onclick=()=>{saveSet(Object.assign({},s,{welcomed:true}))};
  bindPulse();bindDashCheck();
- let rt;const _prevResize=window.onresize;
- window.onresize=e=>{if(_prevResize)_prevResize(e);clearTimeout(rt);rt=setTimeout(()=>{if(location.hash.includes('dash'))vDash()},250)};
+ let rt;window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{if(location.hash.includes('dash'))vDash()},250)};
 }
 function pulseChart(){
  const host=V().querySelector('#pulse');const w=Math.max(300,host?host.clientWidth:600),h=230,P={l:52,r:12,t:14,b:28};
@@ -1223,22 +1085,17 @@ function bindPulse(){const svg=V().querySelector('#pHit');if(!svg)return;
  svg.addEventListener('pointermove',draw);svg.addEventListener('pointerdown',draw);
  svg.addEventListener('pointerleave',()=>{['pguide','pd1','pd2'].forEach(id=>$('#'+id)&&$('#'+id).setAttribute('opacity',0));const t=$('#pTip');if(t)t.style.display='none'})}
 
-
-'use strict';
-/* (continued — same file, appended into the single main script) */
 function docStatus(d,type){if(DOC[type].isReturn)return d.settle==='cash'?'Cash settled':'Credit note';const b=(+d.total)-(+d.paid);return b<=0?'Paid':+d.paid>0?'Partial':'Unpaid'}
 function vDocs(type){const D=DOC[type];S.draftOrder=null;setTop(D.title+'s');setActiveNav(type==='sale'?'sales':type==='purchase'?'purchases':D.path);
- let q='',page=1,size=50;
+ let q='';
  const draw=()=>{const all=state[D.coll]||[];
   const fl=all.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||((b.created||0)-(a.created||0)))
    .filter(d=>{const p=partyById(d.partyId);return !q||(d.no||'').toLowerCase().includes(q)||(p&&p.name.toLowerCase().includes(q))});
-  const pg=pageSlice(fl,page,size);page=pg.page;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${D.title}s</div><div class="psub">${fl.length} documents · ${money(sum(fl,d=>d.total))} total</div></div><a class="btn btn-primary" href="#/${D.path}/new">${ic('plus',16)}New</a></div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="dq" placeholder="Search by no. or party…" value="${esc(q)}"></div>
-  <div class="card"><div class="list">${fl.length?pg.rows.map(d=>{const p=partyById(d.partyId),st=docStatus(d,type);
-   return `<div class="lrow" data-id="${d.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(d.no)}</span><span class="badge ${st==='Paid'||st==='Cash settled'?'b-green':st==='Partial'?'b-amber':'b-gray'}">${st}</span></div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${fmtDate(d.date)}</span></div></div><div class="lright"><div class="lamt">${money(d.total)}</div><div class="lmeta">${d.no&&d.no[0]==='S'&&d.no[1]==='I'?(+d.paid?'recd '+money(d.paid):''):''}${d.no&&d.no.startsWith('PI')?(+d.paid?'paid '+money(d.paid):''):''}</div></div></div>`}).join(''):`<div class="empty">${ic(D.isReturn?'in':'bag',34)}<div class="big">No ${D.title.toLowerCase()}s yet</div>Tap “New” to raise your first one.</div>`}</div>${pagerHtml(pg.total,page,size)}</div></div>`;
-  bindPager(n=>{page=n;draw()},n=>{size=n;page=1;draw()});
-  $('#dq').oninput=e=>{q=e.target.value.toLowerCase();page=1;const p=e.target.selectionStart;draw();const n=$('#dq');n.focus();n.setSelectionRange(p,p)};
+  <div class="card"><div class="list">${fl.length?fl.map(d=>{const p=partyById(d.partyId),st=docStatus(d,type);
+   return `<div class="lrow" data-id="${d.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(d.no)}</span><span class="badge ${st==='Paid'||st==='Cash settled'?'b-green':st==='Partial'?'b-amber':'b-gray'}">${st}</span></div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${fmtDate(d.date)}</span></div></div><div class="lright"><div class="lamt">${money(d.total)}</div><div class="lmeta">${d.no&&d.no[0]==='S'?(+d.paid?'recd '+money(d.paid):''):''}${d.no&&d.no.startsWith('PI')?(+d.paid?'paid '+money(d.paid):''):''}</div></div></div>`}).join(''):`<div class="empty">${ic(D.isReturn?'in':'bag',34)}<div class="big">No ${D.title.toLowerCase()}s yet</div>Tap “New” to raise your first one.</div>`}</div></div>`;
+  $('#dq').oninput=e=>{q=e.target.value.toLowerCase();const p=e.target.selectionStart;draw();const n=$('#dq');n.focus();n.setSelectionRange(p,p)};
   qsa('.lrow').forEach(r=>r.onclick=()=>go(D.path+'/view/'+r.dataset.id))};
  draw()}
 
@@ -1318,8 +1175,8 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
    const nameIn=row.querySelector('.fl-item input');
    attachCombo(nameIn,{
     getPool:()=>ITEMS().slice().sort((a,b)=>a.name.localeCompare(b.name))
-     .map(x=>({id:x.id,label:x.name,rate:+(x[D.rateKey]||0),
-      sub:(catById(x.categoryId)?catById(x.categoryId).name:'-')+' | '+(brandById(x.brandId)?brandById(x.brandId).name:'-')+' | '+money(x[D.rateKey]||0)+' | '+stockOf(x.id)+' in stock'})),
+     .map(it=>({id:it.id,label:it.name,rate:+(it[D.rateKey]||0),
+      sub:`${catById(it.categoryId)?.name||'—'} · ${brandById(it.brandId)?.name||'—'} · ${money(it[D.rateKey]||0)} · ${stockOf(it.id)} in stock`})),
     onPick:o=>{st.lines[i].itemId=o.id;st.lines[i].rate=o.rate;
      row.querySelector('.fl-rate').value=o.rate;recalc()}});
    row.querySelector('.fl-qty').oninput=e=>{st.lines[i].qty=+e.target.value||0;row.querySelector('.fl-amt').textContent=money(st.lines[i].qty*st.lines[i].rate);recalc()};
@@ -1351,6 +1208,9 @@ function vDocForm(type,editId){const D=DOC[type];setTop((editId?'Edit ':'New ')+
  $('#docForm').onsubmit=async e=>{e.preventDefault();const sb=$('#docSaveBtn');sb.disabled=true;
   try{
    if(!st.partyId){toast('Select a party — type in the search box and pick','err');return}
+   const selectedParty=partyById(st.partyId);
+   if(!selectedParty){toast('Selected party no longer exists. Please select again.','err');return}
+   if(!ed&&selectedParty.active===false&&['sale','purchase'].includes(type)){toast('Billing is blocked for this party. Reactivate it from Party details first.','err');return}
    const lines=st.lines.filter(l=>l.itemId&&l.qty>0);
    if(!lines.length){toast('Add at least one item with quantity','err');return}
    if(lines.some(l=>!(+l.rate>=0))){toast('Rates must be 0 or more','err');return}
@@ -1384,7 +1244,7 @@ function vDocView(type,id){const D=DOC[type],d=dbGet(D.coll,id);setTop(D.title,D
      ${D.isReturn?`<span class="muted" style="font-size:12.5px">${d.goodsBack!==false?(type==='saleReturn'?'Goods returned to stock':'Goods returned to supplier'):'No goods movement'} · ${d.settle==='cash'?'cash '+money(d.cashAmount)+' '+(type==='saleReturn'?'refunded':'received'):'credit note in ledger'}</span>`:`<span class="muted" style="font-size:12.5px">${d.payMode||''}</span>`}
    </div>
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
-   ${LINES(d).map(l=>{const it=itemById(l.itemId);return `<div class="lgrow"><span class="ld"><b>${esc(it?it.name:'?')}</b><span>${esc(categoryLabel(it))}${it?.brandId?' · '+esc(brandById(it.brandId)?.name||''):''}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
+   ${LINES(d).map(l=>{const it=itemById(l.itemId);return `<div class="lgrow"><span class="ld"><b>${esc(it?it.name:'?')}</b><span>${esc(catById(it?.categoryId)?.name||'')}${it?.brandId?' · '+esc(brandById(it.brandId)?.name||''):''}</span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow"><span class="muted">Subtotal</span><b>${money(d.subtotal)}</b></div>
      ${D.isReturn?'':`<div class="trow"><span class="muted">Discount</span><b>-${money(d.discount||0)}</b></div>`}
@@ -1414,22 +1274,19 @@ function printDoc(type,id){const D=DOC[type],d=dbGet(D.coll,id),s=SET(),p=partyB
  document.body.classList.add('printing');setTimeout(()=>window.print(),60)}
 window.addEventListener('afterprint',()=>{document.body.classList.remove('printing');$('#printArea').innerHTML=''});
 
-function vParties(){setTop('Parties');setActiveNav('parties');let q='',f='all',page=1,size=50;
+function vParties(){setTop('Parties');setActiveNav('parties');let q='',f='all';
  const draw=()=>{const ps=PARTIES().slice().sort((a,b)=>a.name.localeCompare(b.name));
-  const bm=balancesMap();
   const fl=ps.filter(p=>(f==='all'||p.type===f||(p.type==='both'&&f!=='both'))&&(!q||p.name.toLowerCase().includes(q)||(p.phone||'').includes(q)));
-  const pg=pageSlice(fl,page,size);page=pg.page;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Parties</div><div class="psub">${fl.length} · customers & suppliers</div></div><button class="btn btn-primary" id="pNew">${ic('plus',16)}New</button></div>
   <div style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto" class="tabs">
    ${[['all','All'],['customer','Customers'],['supplier','Suppliers']].map(x=>`<button class="chip ${f===x[0]?'on':''}" data-pf="${x[0]}">${x[1]}</button>`).join('')}
   </div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="pq" placeholder="Search name or phone…" value="${esc(q)}"></div>
-  <div class="card"><div class="list">${fl.length?pg.rows.map(p=>{const bal=bm[p.id]||0;
-   return `<div class="lrow" data-id="${p.id}"><div class="lmain"><div class="lname">${esc(p.name)} <span class="badge ${p.type==='customer'?'b-green':p.type==='supplier'?'b-red':'b-gray'}">${p.type}</span></div><div class="lsub">${esc(p.phone||'—')}</div></div><div class="lright"><div class="lamt" style="color:${bal>0.004?'var(--green)':bal<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(bal))}</div><div class="lmeta">${Math.abs(bal)<0.004?'settled':bal>0?'owes you':'you owe'}</div></div></div>`}).join(''):`<div class="empty">${ic('users',34)}<div class="big">No parties found</div></div>`}</div>${pagerHtml(pg.total,page,size)}</div>`;
-  bindPager(n=>{page=n;draw()},n=>{size=n;page=1;draw()});
+  <div class="card"><div class="list">${fl.length?fl.map(p=>{const bal=partyBalance(p.id);
+   return `<div class="lrow" data-id="${p.id}"><div class="lmain"><div class="lname">${esc(p.name)} <span class="badge ${p.type==='customer'?'b-green':p.type==='supplier'?'b-red':'b-gray'}">${p.type}</span></div><div class="lsub">${esc(p.phone||'—')}</div></div><div class="lright"><div class="lamt" style="color:${bal>0.004?'var(--green)':bal<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(bal))}</div><div class="lmeta">${Math.abs(bal)<0.004?'settled':bal>0?'owes you':'you owe'}</div></div></div>`}).join(''):`<div class="empty">${ic('users',34)}<div class="big">No parties found</div></div>`}</div></div>`;
   $('#pNew').onclick=()=>openPartyModal();
   qsa('[data-pf]').forEach(b=>b.onclick=()=>{f=b.dataset.pf;draw()});
-  $('#pq').oninput=e=>{q=e.target.value.toLowerCase();page=1;const pos=e.target.selectionStart;draw();const n=$('#pq');n.focus();n.setSelectionRange(pos,pos)};
+  $('#pq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#pq');n.focus();n.setSelectionRange(pos,pos)};
   qsa('.lrow').forEach(r=>r.onclick=()=>go('parties/'+r.dataset.id))};
  draw()}
 function openPartyModal(p){openModal(`<div class="mhead"><h3>${p?'Edit party':'New party'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
@@ -1449,7 +1306,9 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
  setActiveNav('parties');const bal=partyBalance(id),es=partyEntries(id);let run=0;
  V().innerHTML=`
  <div class="pagehead"><div><span class="lbl">${esc(p.type)}</span><div class="ptitle">${esc(p.name)}</div><div class="psub">${esc(p.phone||'')}${p.address?' · '+esc(p.address):''}</div></div>
- <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="pdEdit">${ic('edit',16)}Edit</button>
+ <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge ${p.active===false?'b-red':'b-green'}">${p.active===false?'Billing blocked':'Active'}</span><button class="btn btn-ghost" id="pdEdit">${ic('edit',16)}Edit</button>
+ <button class="btn btn-ghost" id="pdToggle">${ic(p.active===false?'check':'x',16)}${p.active===false?'Reactivate':'Block billing'}</button>
+ <button class="btn btn-danger" id="pdDelete">${ic('trash',16)}Delete</button>
  ${bal>0.004?`<a class="btn btn-primary" href="#/collections/new/${id}">${ic('down',16)}Receive</a>`:''}
  ${bal<-0.004?`<a class="btn btn-primary" href="#/payments/new/${id}">${ic('up',16)}Pay</a>`:''}</div></div>
  <div class="sumrow" style="grid-template-columns:repeat(3,1fr)">
@@ -1461,18 +1320,24 @@ function vPartyDetail(id){const p=partyById(id);setTop(p?p.name:'Party','parties
   ${es.length?es.map(e=>{run+=e.dr-e.cr;return `<div class="lgrow" ${e.link?`data-go="${e.link}" style="cursor:pointer"`:''}><span class="ld"><b>${esc(e.desc)}${e.memo?' <span class="badge b-gray">memo</span>':''}</b><span>${fmtDate(e.date)}${e.ref?' · '+esc(e.ref):''}</span></span><span class="num" style="color:var(--green)">${e.dr?money(e.dr):''}</span><span class="num" style="color:var(--red)">${e.cr?money(e.cr):''}</span><span class="num" style="font-weight:600;color:${run>0.004?'var(--green)':run<-0.004?'var(--red)':'var(--ink2)'}">${money(Math.abs(run))} ${Math.abs(run)<0.004?'':run>0?'Dr':'Cr'}</span></div>`}).join(''):`<div class="muted" style="text-align:center;padding:16px 0">No ledger entries yet.</div>`}
  </div></div>`;
  qsa('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
- $('#pdEdit').onclick=()=>openPartyModal(p)}
+ $('#pdEdit').onclick=()=>openPartyModal(p);
+ $('#pdToggle').onclick=()=>confirmBox(p.active===false?'Reactivate party?':'Block billing for this party?',p.active===false?'This party can be selected for new billing again.':'New invoices/orders for this party will be blocked. Existing ledger and receipts/payments remain available.',()=>{dbUpdate('parties',id,{active:p.active===false});toast(p.active===false?'Party reactivated':'Party blocked for billing');route()});
+ $('#pdDelete').onclick=()=>{
+  const used=[SALES,PURCHASES,SRET,PRET,RECEIPTS,PAYMENTS].some(fn=>fn().some(d=>d.partyId===id));
+  const linked=USERS().some(u=>u.partyId===id);
+  const hasOpening=(+p.openingBalance||0)!==0;
+  if(used||linked||hasOpening)return toast('Cannot delete: party has transactions, an opening balance, or a linked login. Block billing instead.','err');
+  confirmBox('Delete '+p.name+'?','This party has no linked login or transactions. This cannot be undone.',()=>{dbDel('parties',id);toast('Party deleted');go('parties')})
+ }}
 
-function vItems(){setTop('Items');setActiveNav('items');let q='',page=1,size=50;
+function vItems(){setTop('Items');setActiveNav('items');let q='';
  const editOK=can.stockEdit(S.me);
  const draw=()=>{const its=ITEMS().slice().sort((a,b)=>a.name.localeCompare(b.name)).filter(i=>!q||(i.name+' '+(i.sku||'')).toLowerCase().includes(q));
-  const pg=pageSlice(its,page,size);page=pg.page;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Items</div><div class="psub">${its.length} in catalogue${editOK?'':' · read-only for staff'}</div></div>${editOK?`<button class="btn btn-primary" id="iNew">${ic('plus',16)}New</button>`:''}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="iq" placeholder="Search items…" value="${esc(q)}"></div>
-  <div class="card"><div class="list">${its.length?pg.rows.map(i=>{const so=stockOf(i.id),low=+(i.low||10);
-   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(categoryLabel(i))}</span><span>·</span><span>${esc(itemBrand(i)?.name||'Unassigned')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
-   ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-stk="${i.id}" title="Adjust stock">${ic('layers',15)}</button><button class="icon-btn" data-edit="${i.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${i.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">${ic('box',34)}<div class="big">No items yet</div>Create your first accessory.</div>`}</div>${pagerHtml(pg.total,page,size)}</div>`;
-  bindPager(n=>{page=n;draw()},n=>{size=n;page=1;draw()});
+  <div class="card"><div class="list">${its.length?its.map(i=>{const so=stockOf(i.id),low=+(i.low||10);
+   return `<div class="lrow editmode">${itemThumb(i,38)}<div class="lmain"><div class="lname">${esc(i.name)}</div><div class="lsub"><span>${esc(catById(i.categoryId)?.name||'—')}</span><span>·</span><span>${esc(brandById(i.brandId)?.name||'—')}</span><span>·</span><span>sell ${money(i.saleRate)}</span></div></div><div class="lright"><div class="lamt" style="color:${so<=0?'var(--red)':so<=low?'var(--amber)':'var(--ink)'}">${so}</div><div class="lmeta">in stock</div></div>
+   ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-stk="${i.id}" title="Adjust stock">${ic('layers',15)}</button><button class="icon-btn" data-edit="${i.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${i.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">${ic('box',34)}<div class="big">No items yet</div>Create your first accessory.</div>`}</div></div>`;
   if(editOK){$('#iNew').onclick=()=>openItemModal();
    qsa('[data-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();openItemModal(itemById(b.dataset.edit))});
    qsa('[data-stk]').forEach(b=>b.onclick=e=>{e.stopPropagation();openStockModal(itemById(b.dataset.stk))});
@@ -1480,116 +1345,83 @@ function vItems(){setTop('Items');setActiveNav('items');let q='',page=1,size=50;
     const used=[SALES,PURCHASES,SRET,PRET].some(c=>c().some(d=>LINES(d).some(l=>l.itemId===id)));
     if(used)return toast('Item is used in documents — cannot delete','err');
     confirmBox('Delete item?','This cannot be undone.',()=>{dbDel('items',id);toast('Item deleted')})})}
-  $('#iq').oninput=e=>{q=e.target.value.toLowerCase();page=1;const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
+  $('#iq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#iq');n.focus();n.setSelectionRange(pos,pos)}};
  draw()}
 function openItemModal(it){let photoVal=it?(it.photo||''):'';
- const parentOf=cid=>{const c=masterName(CATS(),cid);return c&&c.parentId?c.parentId:(cid||'')};
- const pid0=parentOf(it?it.categoryId:'');
- const sub0=it?(it.subcategoryId||it.subCategoryId||(masterName(CATS(),it.categoryId)&&masterName(CATS(),it.categoryId).parentId?it.categoryId:'')):'';
  openModal(`<div class="mhead"><h3>${it?'Edit item':'New item'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="imForm">
   <div class="field"><label class="fl">Item name</label><input class="in" id="im-name" required value="${esc(it?.name||'')}" placeholder="e.g. boAt 33W Type-C Charger"></div>
   <div class="field"><label class="fl">Product photo (customers see this in the shop)</label>
-    <div class="photopick"><span class="pv" id="ph-pv">${photoVal?`<img src="${photoVal}" alt="">`:ic('box',26)}</span>
-      <div style="flex:1;min-width:0"><input type="file" id="ph-file" accept="image/*" style="display:none">
-        <div style="display:flex;gap:8px;flex-wrap:wrap" id="ph-btns">
+    <div class="photopick">
+      <span class="pv" id="ph-pv">${photoVal?`<img src="${photoVal}" alt="">`:ic('box',26)}</span>
+      <div style="flex:1;min-width:0">
+        <input type="file" id="ph-file" accept="image/*" style="display:none">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-ghost btn-sm" id="ph-sel">${ic('up',15)}Choose photo</button>
           ${photoVal?`<button type="button" class="btn btn-ghost btn-sm" id="ph-rm" style="color:var(--red)">${ic('trash',15)}Remove</button>`:''}
         </div>
         <div class="muted" style="font-size:11.5px;margin-top:6px">Auto-compressed & saved with the item. Square photos look best.</div>
-      </div></div></div>
-  <div class="frow">
-   <div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().filter(c=>!c.parentId).map(c=>`<option value="${c.id}" ${sel(c.id,pid0)}>${esc(c.name)}</option>`).join('')}</select></div>
-   <div class="field"><label class="fl">Subcategory</label><select class="sel" id="im-subcat"><option value="">— None —</option>${CATS().filter(c=>c.parentId===pid0).map(c=>`<option value="${c.id}" ${sel(c.id,sub0)}>${esc(c.name)}</option>`).join('')}</select></div></div>
-  <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div>
-  <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?(+it.purchaseRate||''):''}"></div>
-  <div class="field"><label class="fl">Sale rate</label><input class="in" type="number" step="any" id="im-sr" value="${it?(+it.saleRate||''):''}"></div></div>
-  <div class="frow"><div class="field"><label class="fl">Opening stock</label><input class="in" type="number" step="any" id="im-os" value="${it?(+it.openingStock||''):''}" placeholder="0"></div>
-  <div class="field"><label class="fl">Opening rate</label><input class="in" type="number" step="any" id="im-or" value="${it?(+it.openingRate||''):''}" placeholder="0"></div></div>
-  <div class="frow"><div class="field"><label class="fl">Low-stock alert at</label><input class="in" type="number" step="any" id="im-low" value="${it?(+it.low||10):10}"></div>
+      </div>
+    </div></div>
+  <div class="frow"><div class="field"><label class="fl">Category</label><select class="sel" id="im-cat"><option value="">—</option>${CATS().map(c=>`<option value="${c.id}" ${sel(c.id,it?.categoryId)}>${esc(c.name)}</option>`).join('')}</select></div>
+  <div class="field"><label class="fl">Brand</label><select class="sel" id="im-brand"><option value="">—</option>${BRANDS().map(b=>`<option value="${b.id}" ${sel(b.id,it?.brandId)}>${esc(b.name)}</option>`).join('')}</select></div></div>
+  <div class="frow"><div class="field"><label class="fl">Purchase rate</label><input class="in" type="number" step="any" id="im-pr" value="${it?+it.purchaseRate||'':''}"></div>
+  <div class="field"><label class="fl">Sale rate</label><input class="in" type="number" step="any" id="im-sr" value="${it?+it.saleRate||'':''}"></div></div>
+  <div class="frow"><div class="field"><label class="fl">Opening stock</label><input class="in" type="number" step="any" id="im-os" value="${it?+it.openingStock||'':''}" placeholder="0"></div>
+  <div class="field"><label class="fl">Opening rate</label><input class="in" type="number" step="any" id="im-or" value="${it?+it.openingRate||'':''}" placeholder="0"></div></div>
+  <div class="frow"><div class="field"><label class="fl">Low-stock alert at</label><input class="in" type="number" step="any" id="im-low" value="${it?+it.low||10:10}"></div>
   <div class="field"><label class="fl">SKU</label><input class="in" id="im-sku" value="${esc(it?.sku||'')}"></div></div>
   <button class="btn btn-primary" style="width:100%">${it?'Save changes':'Create item'}</button></form></div>`);
  $('#ph-sel').onclick=()=>$('#ph-file').click();
- const bindRm=()=>{const rm=$('#ph-rm');if(rm)rm.onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);rm.remove()}};bindRm();
  $('#ph-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
   const btn=$('#ph-sel');btn.disabled=true;const old=btn.innerHTML;btn.textContent='Processing…';
-  try{photoVal=await photoDataUrl(f);$('#ph-pv').innerHTML=`<img src="${photoVal}" alt="">`;
-   if(!$('#ph-rm'))$('#ph-btns').insertAdjacentHTML('beforeend',`<button type="button" class="btn btn-ghost btn-sm" id="ph-rm" style="color:var(--red)">${ic('trash',15)}Remove</button>`);
-   bindRm()}
+  try{photoVal=await photoDataUrl(f);
+   $('#ph-pv').innerHTML=`<img src="${photoVal}" alt="">`;
+   if(!$('#ph-rm'))btn.insertAdjacentHTML('afterend',`<button type="button" class="btn btn-ghost btn-sm" id="ph-rm" style="color:var(--red)">${ic('trash',15)}Remove</button>`);
+   $('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
+   toast('Photo ready — press Save to keep it')}
   catch(ex){toast('Could not read that image','err')}
-  finally{btn.disabled=false;btn.innerHTML=old;e.target.value=''}};
- $('#im-cat').onchange=()=>{const pid=$('#im-cat').value;
-  $('#im-subcat').innerHTML='<option value="">— None —</option>'+CATS().filter(c=>c.parentId===pid).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')};
- $('#imForm').onsubmit=e=>{e.preventDefault();
-  const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,subcategoryId:$('#im-subcat').value,
-   brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,
-   openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,
-   sku:$('#im-sku').value.trim(),unit:(it&&it.unit)||'Pcs'};
-  if(!o.name)return toast('Item name is required','err');
-  if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}
-  closeModal();route()}}
-function openStockModal(it){if(!it)return;
- openModal(`<div class="mhead"><h3>Adjust stock — ${esc(it.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+  btn.disabled=false;btn.innerHTML=old;e.target.value=''};
+ if($('#ph-rm'))$('#ph-rm').onclick=()=>{photoVal='';$('#ph-pv').innerHTML=ic('box',26);$('#ph-rm').remove()};
+ $('#imForm').onsubmit=e=>{e.preventDefault();const o={name:$('#im-name').value.trim(),photo:photoVal,categoryId:$('#im-cat').value,brandId:$('#im-brand').value,purchaseRate:+$('#im-pr').value||0,saleRate:+$('#im-sr').value||0,openingStock:+$('#im-os').value||0,openingRate:+$('#im-or').value||0,low:+$('#im-low').value||10,sku:$('#im-sku').value.trim()};
+  if(!o.name)return toast('Name is required','err');
+  if(it){dbUpdate('items',it.id,o);toast('Item updated')}else{dbAdd('items',o);toast('Item created')}closeModal();route()}}
+function openStockModal(it){if(!it)return;const cur=stockOf(it.id);
+ const recent=ADJ().filter(a=>a.itemId===it.id).slice(-4).reverse();
+ openModal(`<div class="mhead"><h3>Adjust stock</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
  <div class="mbody"><form id="saForm">
-  <div class="frow"><div class="field"><label class="fl">Quantity change (+ / −)</label><input class="in" type="number" step="any" id="sa-delta" required placeholder="e.g. -2 or 10"></div>
-  <div class="field"><label class="fl">Cost rate (additions only)</label><input class="in" type="number" step="any" id="sa-rate" placeholder="per unit"></div></div>
-  <div class="field"><label class="fl">Reason</label><select class="sel" id="sa-reason">${['Damaged / dead stock','Stock count correction','Opening correction','Gift / sample','Theft / loss','Other'].map(r=>`<option>${r}</option>`).join('')}</select></div>
-  <div class="field"><label class="fl">Date</label><input type="date" class="in" id="sa-date" value="${todayISO()}"></div>
-  <div class="muted" style="font-size:13px;margin-bottom:12px">Current stock: <b>${stockOf(it.id)}</b></div>
+  <div class="notice green" style="margin:0 0 14px">${ic('box',15)}<div><b>${esc(it.name)}</b><br>Current stock: <b class="mono">${cur}</b></div></div>
+  <div class="frow"><div class="field"><label class="fl">Adjustment (+ / −)</label><input class="in" type="number" step="any" id="sa-delta" required placeholder="e.g. -2 or 5"></div>
+  <div class="field"><label class="fl">Unit rate (if +)</label><input class="in" type="number" step="any" id="sa-rate" value="${+it.purchaseRate||''}" placeholder="0"></div></div>
+  <div class="frow"><div class="field"><label class="fl">Reason</label><select class="sel" id="sa-reason">${['Physical count correction','Damaged / dead stock','Lost / missing','Extra stock received','Given as sample','Other'].map(r=>`<option>${r}</option>`).join('')}</select></div>
+  <div class="field"><label class="fl">Date</label><input class="in" type="date" id="sa-date" value="${todayISO()}" required></div></div>
+  ${recent.length?`<div class="lbl" style="margin-bottom:6px">Recent adjustments</div>${recent.map(a=>`<div class="trow" style="font-size:12.5px"><span class="muted">${esc(a.reason)} · ${fmtDate(a.date)} · ${esc(a.by||'')}</span><b style="color:${+a.delta>=0?'var(--green)':'var(--red)'}">${+a.delta>=0?'+':''}${a.delta}</b></div>`).join('')}`:''}
   <button class="btn btn-primary" style="width:100%">Apply adjustment</button></form></div>`);
  $('#saForm').onsubmit=e=>{e.preventDefault();const d=+$('#sa-delta').value;
-  if(!d)return toast('Enter a non-zero quantity','err');
-  dbAdd('stockAdj',{itemId:it.id,delta:d,rate:+$('#sa-rate').value||0,reason:$('#sa-reason').value,date:$('#sa-date').value||todayISO(),by:S.me.name,created:Date.now()});
-  toast('Stock adjusted');closeModal();route()}}
-
-function vCats(){setTop('Categories');setActiveNav('categories');
- const draw=()=>{const roots=CATS().filter(c=>!c.parentId).sort((a,b)=>a.name.localeCompare(b.name));
-  const subs=groupBy(CATS().filter(c=>c.parentId),'parentId');
-  const itemsIn=id=>ITEMS().filter(i=>i.categoryId===id||i.subcategoryId===id||i.subCategoryId===id).length;
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Categories</div><div class="psub">${roots.length} top-level · ${CATS().length-roots.length} subcategories</div></div><button class="btn btn-primary" id="cNew">${ic('plus',16)}New</button></div>
-  <div class="card"><div class="list">${roots.length?roots.map(r=>{const tc=tileFor(r.name);return `<div class="lrow editmode"><span class="avatar" style="background:${tc[0]};color:${tc[1]}">${esc(r.name[0]||'?')}</span>
-   <div class="lmain"><div class="lname">${esc(r.name)}</div><div class="lsub"><span>${itemsIn(r.id)} items</span>${(subs[r.id]||[]).map(s=>`<span>· ${esc(s.name)}</span>`).join('')}</div></div>
-   <div style="display:flex;gap:6px"><button class="icon-btn" data-ed="${r.id}">${ic('edit',15)}</button><button class="icon-btn" data-dl="${r.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic('tag',34)}<div class="big">No categories yet</div>Create categories like Chargers, Cables, Earphones.</div>`}</div></div>`;
-  $('#cNew').onclick=()=>openCatModal();
-  qsa('[data-ed]').forEach(b=>b.onclick=()=>openCatModal(catById(b.dataset.ed)));
-  qsa('[data-dl]').forEach(b=>b.onclick=()=>{const c=catById(b.dataset.dl);
-   const kids=CATS().filter(x=>x.parentId===c.id).length,used=ITEMS().filter(i=>i.categoryId===c.id||i.subcategoryId===c.id||i.subCategoryId===c.id).length;
-   if(kids||used)return toast('In use by '+(kids?kids+' subcategories':used+' items')+' — remove those first','err');
-   confirmBox('Delete '+c.name+'?','This cannot be undone.',()=>{dbDel('categories',c.id);toast('Category deleted')})})};
+  if(!d)return toast('Enter a non-zero adjustment','err');
+  dbAdd('stockAdj',{itemId:it.id,delta:d,rate:+$('#sa-rate').value||0,reason:$('#sa-reason').value,date:$('#sa-date').value,by:S.me.name});
+  closeModal();toast('Stock adjusted: '+(d>0?'+':'')+d+' → new stock '+stockOf(it.id));route()}}
+function masterPage(key,title,collect,extra){setTop(title);setActiveNav(key);
+ const editOK=can.stockEdit(S.me);
+ const draw=()=>{const rows=collect().slice().sort((a,b)=>a.name.localeCompare(b.name));
+  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${title}</div><div class="psub">${rows.length} total</div></div>${editOK?`<button class="btn btn-primary" id="mNew">${ic('plus',16)}New</button>`:''}</div>
+  <div class="card"><div class="list">${rows.length?rows.map(r=>`<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(r.name)}</div>${extra?`<div class="lsub">${extra(r)}</div>`:''}</div>
+   ${editOK?`<div style="display:flex;gap:6px"><button class="icon-btn" data-edit="${r.id}">${ic('edit',15)}</button><button class="icon-btn" data-del="${r.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`).join(''):`<div class="empty">${ic('tag',34)}<div class="big">Nothing here yet</div></div>`}</div></div>`;
+  if(editOK){$('#mNew').onclick=()=>openCBModal(key,null,draw);
+   qsa('[data-edit]').forEach(b=>b.onclick=()=>openCBModal(key,collect().find(x=>x.id===b.dataset.edit),draw));
+   qsa('[data-del]').forEach(b=>b.onclick=()=>{const id=b.dataset.del;
+    if(key==='categories'&&ITEMS().some(i=>i.categoryId===id))return toast('Category has items','err');
+    if(key==='brands'&&ITEMS().some(i=>i.brandId===id))return toast('Brand has items','err');
+    confirmBox('Delete?','This cannot be undone.',()=>{dbDel(key,id);toast('Deleted')})})}};
  draw()}
-function openCatModal(c){openModal(`<div class="mhead"><h3>${c?'Edit category':'New category'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><form id="cmForm">
-  <div class="field"><label class="fl">Name</label><input class="in" id="cm-name" required value="${esc(c?.name||'')}"></div>
-  <div class="field"><label class="fl">Parent</label><select class="sel" id="cm-parent"><option value="">— Top level —</option>${CATS().filter(x=>!x.parentId&&(!c||x.id!==c.id)).map(x=>`<option value="${x.id}" ${sel(x.id,c?.parentId)}>${esc(x.name)}</option>`).join('')}</select></div>
-  <button class="btn btn-primary" style="width:100%">${c?'Save changes':'Create'}</button></form></div>`);
- $('#cmForm').onsubmit=e=>{e.preventDefault();const name=$('#cm-name').value.trim(),parentId=$('#cm-parent').value;
-  if(!name)return toast('Name is required','err');
-  if(CATS().some(x=>x.id!==(c?c.id:'')&&x.name.toLowerCase()===name.toLowerCase()&&(x.parentId||'')===(parentId||'')))return toast('A category with this name already exists here','err');
-  const o={name,parentId:parentId||''};
-  if(c){dbUpdate('categories',c.id,o);toast('Category updated')}else{dbAdd('categories',o);toast('Category created')}
-  closeModal();route()}}
-function vBrands(){setTop('Brands');setActiveNav('brands');
- const draw=()=>{const bs=BRANDS().slice().sort((a,b)=>a.name.localeCompare(b.name));
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Brands</div><div class="psub">${bs.length} brands</div></div><button class="btn btn-primary" id="bNew">${ic('plus',16)}New</button></div>
-  <div class="card"><div class="list">${bs.length?bs.map(b=>{const n=ITEMS().filter(i=>i.brandId===b.id).length;const tc=tileFor(b.name);
-   return `<div class="lrow editmode"><span class="avatar" style="background:${tc[0]};color:${tc[1]}">${esc(b.name[0]||'?')}</span>
-   <div class="lmain"><div class="lname">${esc(b.name)}</div><div class="lsub"><span>${n} item${n===1?'':'s'}</span></div></div>
-   <div style="display:flex;gap:6px"><button class="icon-btn" data-ed="${b.id}">${ic('edit',15)}</button><button class="icon-btn" data-dl="${b.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic('layers',34)}<div class="big">No brands yet</div>Add brands like boAt, Samsung, JBL.</div>`}</div></div>`;
-  $('#bNew').onclick=()=>openBrandModal();
-  qsa('[data-ed]').forEach(b=>b.onclick=()=>openBrandModal(brandById(b.dataset.ed)));
-  qsa('[data-dl]').forEach(b=>b.onclick=()=>{const br=brandById(b.dataset.dl);
-   if(ITEMS().some(i=>i.brandId===br.id))return toast('Brand is used by items — reassign them first','err');
-   confirmBox('Delete '+br.name+'?','This cannot be undone.',()=>{dbDel('brands',br.id);toast('Brand deleted')})})};
- draw()}
-function openBrandModal(b){openModal(`<div class="mhead"><h3>${b?'Edit brand':'New brand'}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><form id="bmForm">
-  <div class="field"><label class="fl">Name</label><input class="in" id="bm-name" required value="${esc(b?.name||'')}"></div>
-  <button class="btn btn-primary" style="width:100%">${b?'Save changes':'Create'}</button></form></div>`);
- $('#bmForm').onsubmit=e=>{e.preventDefault();const name=$('#bm-name').value.trim();
-  if(!name)return toast('Name is required','err');
-  if(BRANDS().some(x=>x.id!==(b?b.id:'')&&x.name.toLowerCase()===name.toLowerCase()))return toast('That brand already exists','err');
-  if(b){dbUpdate('brands',b.id,{name});toast('Brand updated')}else{dbAdd('brands',{name});toast('Brand created')}
-  closeModal();route()}}
+function openCBModal(key,obj,after){const label=key==='categories'?'Category':'Brand';
+ openModal(`<div class="mhead"><h3>${obj?'Edit '+label:'New '+label}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
+ <div class="mbody"><form id="cbForm"><div class="field"><label class="fl">Name</label><input class="in" id="cb-name" required value="${esc(obj?.name||'')}"></div>
+ <button class="btn btn-primary" style="width:100%">Save</button></form></div>`);
+ $('#cbForm').onsubmit=e=>{e.preventDefault();const name=$('#cb-name').value.trim();if(!name)return toast('Name required','err');
+  if(obj){dbUpdate(key,obj.id,{name})}else{dbAdd(key,{name})}toast(label+' saved');closeModal();after()}}
+const vCats=()=>masterPage('categories','Categories',CATS,r=>ITEMS().filter(i=>i.categoryId===r.id).length+' items');
+const vBrands=()=>masterPage('brands','Brands',BRANDS,r=>ITEMS().filter(i=>i.brandId===r.id).length+' items');
 
 function vLedger(pid){setTop('Ledger');setActiveNav('ledger');
  if(!pid&&PARTIES().length)pid=PARTIES()[0].id;
@@ -1608,15 +1440,13 @@ function vLedger(pid){setTop('Ledger');setActiveNav('ledger');
  draw()}
 
 function vMoneyList(kind){const isR=kind==='receipt';setTop(isR?'Collections':'Payments');setActiveNav(isR?'collections':'payments');
- const coll=isR?RECEIPTS():PAYMENTS(),path=isR?'collections':'payments';let page=1,size=50;
+ const coll=isR?RECEIPTS():PAYMENTS(),path=isR?'collections':'payments';
  const draw=()=>{const rows=coll.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||((b.created||0)-(a.created||0)));
-  const pg=pageSlice(rows,page,size);page=pg.page;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">${isR?'Collections':'Payments'}</div><div class="psub">${rows.length} entries · ${money(sum(rows,r=>r.amount))}</div></div><a class="btn btn-primary" href="#/${path}/new">${ic('plus',16)}New</a></div>
-  <div class="card"><div class="list">${rows.length?pg.rows.map(r=>{const p=partyById(r.partyId);
+  <div class="card"><div class="list">${rows.length?rows.map(r=>{const p=partyById(r.partyId);
    return `<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(p?p.name:'—')}</div><div class="lsub"><span>${fmtDate(r.date)}</span><span>·</span><span>${esc(r.mode||'')}</span>${r.note?'<span>·</span><span>'+esc(r.note)+'</span>':''}</div></div>
    <div class="lright"><div class="lamt" style="color:${isR?'var(--green)':'var(--red)'}">${money(r.amount)}</div></div>
-   <div style="display:flex;gap:6px"><a class="icon-btn" href="#/${path}/edit/${r.id}">${ic('edit',15)}</a><button class="icon-btn" data-del="${r.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic(isR?'down':'up',34)}<div class="big">Nothing recorded yet</div>${isR?'Cash received from customers appears here.':'Cash paid to suppliers appears here.'}</div>`}</div>${pagerHtml(pg.total,page,size)}</div>`;
-  bindPager(n=>{page=n;draw()},n=>{size=n;page=1;draw()});
+   <div style="display:flex;gap:6px"><a class="icon-btn" href="#/${path}/edit/${r.id}">${ic('edit',15)}</a><button class="icon-btn" data-del="${r.id}" style="color:var(--red)">${ic('trash',15)}</button></div></div>`}).join(''):`<div class="empty">${ic(isR?'down':'up',34)}<div class="big">Nothing recorded yet</div>${isR?'Cash received from customers appears here.':'Cash paid to suppliers appears here.'}</div>`}</div></div>`;
   qsa('[data-del]').forEach(b=>b.onclick=()=>confirmBox('Delete entry?','Ledger balances recalculate automatically.',()=>{dbDel(isR?'receipts':'payments',b.dataset.del);toast('Deleted')}))};
  draw()}
 function vMoneyForm(kind,preParty,editId){const isR=kind==='receipt';setTop((editId?'Edit ':'New ')+(isR?'Collection':'Payment'),isR?'collections':'payments');
@@ -1658,64 +1488,277 @@ function barRow(label,sub,val,max,color){const w=max>0?Math.max(2,val/max*100):0
  return `<div class="brow"><div><span class="bname">${esc(label)}</span>${sub?`<span class="bsub">${sub}</span>`:''}</div><div class="btrack"><i style="width:${w}%;background:${color}"></i></div><div class="bv">${money(val)}</div></div>`}
 function sumTile(l,v,c){return `<div class="sum"><span class="lbl">${l}</span><b ${c?`style="color:${c}"`:''}>${v}</b></div>`}
 function emptyHtml(icon,msg){return `<div class="empty">${ic(icon,34)}<div class="big">${msg}</div></div>`}
-const PAGE_SIZE_DEFAULT=50;
-function pageSlice(rows,page,size=PAGE_SIZE_DEFAULT){const total=rows.length,pages=Math.max(1,Math.ceil(total/size));page=Math.max(1,Math.min(page,pages));return{rows:rows.slice((page-1)*size,page*size),page,pages,total,start:total?(page-1)*size+1:0,end:Math.min(page*size,total)}}
-function pagerHtml(total,page,size=PAGE_SIZE_DEFAULT,attr='data-page'){const pages=Math.max(1,Math.ceil(total/size));if(total<=size)return '';return `<div class="pager"><span class="pginfo">Showing ${(page-1)*size+1}–${Math.min(page*size,total)} of ${total}</span><div class="pgbuttons"><label class="pginfo">Rows <select class="sel pgsize" data-pagesize><option value="25" ${size===25?'selected':''}>25</option><option value="50" ${size===50?'selected':''}>50</option><option value="100" ${size===100?'selected':''}>100</option></select></label><button class="pgbtn" ${attr}="${page-1}" ${page<=1?'disabled':''}>Previous</button><span class="pginfo">Page ${page} / ${pages}</span><button class="pgbtn" ${attr}="${page+1}" ${page>=pages?'disabled':''}>Next</button></div></div>`}
-function bindPager(onPage,onSize){qsa('[data-page]').forEach(b=>b.onclick=()=>{if(!b.disabled)onPage(+b.dataset.page)});qsa('[data-pagesize]').forEach(s=>s.onchange=()=>onSize(+s.value))}
-function masterName(pool,idOrName){if(!idOrName)return null;return pool.find(x=>x.id===idOrName)||pool.find(x=>(x.name||'').toLowerCase()===(String(idOrName).toLowerCase()))||null}
-function itemBrand(it){return masterName(BRANDS(),it?.brandId||it?.brandID||it?.brand_id||it?.brand)||null}
-function itemCategory(it){return masterName(CATS(),it?.categoryId||it?.categoryID||it?.category_id||it?.category)||null}
-function itemSubcategory(it){return masterName(CATS(),it?.subcategoryId||it?.subCategoryId||it?.subcategory_id||it?.subcategory)||null}
-function categoryLabel(it){const c=itemCategory(it),sc=itemSubcategory(it);const actual=c&&c.parentId?c:null;const parent=actual?masterName(CATS(),c.parentId):c;const sub=sc||(actual?c:null);return [parent?.name,sub?.name].filter(Boolean).join(' / ')||'—'}
 function mk([f,t]){return{from:f,to:t}}
 
-function vReportStock(){setTop('Stock Valuation');setActiveNav('r/stock');S.report.stock=S.report.stock||{tab:'item',basis:'cost'};
- const key='stock';const draw=()=>{const st=S.report[key],tab=st.tab,co=S.me.role==='company',basis=co?'cost':(st.basis||'cost');
-  const assignedIds=co?(Array.isArray(S.me.brandIds)?S.me.brandIds:(Array.isArray(S.me.assignedBrandIds)?S.me.assignedBrandIds:[])):null;
-  const rows=stockRows().filter(x=>{if(!co)return true;const b=itemBrand(x.it);return !!b&&assignedIds.includes(b.id)}).map(x=>{const sv=x.qty*(+x.it.saleRate||0);return{it:x.it,qty:x.qty,ac:x.ac,cv:x.value,sv,profit:sv-x.cv}});
-  const totC=sum(rows,x=>x.cv),totS=sum(rows,x=>x.sv),totP=totS-totC,mg=totS>0.004?totP/totS*100:0;
-  const val=x=>basis==='cost'?x.cv:x.sv;
-  const barCol=basis==='cost'?'var(--green)':'var(--amber)';
-  let body='';
-  if(tab==='item'){
-   const arr=rows.slice().sort((a,b)=>val(b)-val(a));const mx=Math.max(1,...arr.map(val));
-   body=arr.length?arr.map(x=>{const v=val(x);
-    const meta=`${esc(categoryLabel(x.it))} · ${esc(itemBrand(x.it)?.name||'Unassigned')}`;
-    const sub=co
-     ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)}`
-     :(basis==='cost'
-      ?`${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
-      :`${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · <b style="color:${x.profit>=0?'var(--green)':'var(--red)'}">${x.profit>=0?'profit':'loss'} ${money(Math.abs(x.profit))}</b>`);
-    return `<div class="brow"><div><span class="bname">${esc(x.it.name)}</span><span class="bsub">${sub}</span></div><div class="btrack"><i style="width:${Math.max(2,v/mx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join('')
-    +`<div class="trow grand" style="max-width:420px;margin-left:auto"><span class="lbl">${basis==='cost'?'Total stock @ cost':'Total stock @ sale price'}</span><b style="font-size:17px">${money(basis==='cost'?totC:totS)}</b></div>`
-    :emptyHtml('box','No items yet')}
-  else{
-   const dim=tab==='brand'?'brandId':tab==='subcategory'?'subcategoryId':'categoryId';
-   const groups=groupBy(rows,x=>{const it=x.it||{};if(dim==='brandId')return itemBrand(it)?.id||'__na';if(dim==='subcategoryId')return itemSubcategory(it)?.id||(itemCategory(it)?.parentId?itemCategory(it).id:'__na');return itemCategory(it)&&!itemCategory(it).parentId?itemCategory(it).id:(itemCategory(it)?.parentId||'__na')});
-   const pool=(dim==='brandId'?BRANDS():CATS());
-   const arr=Object.keys(groups).map(id=>{const g=groups[id];
-    const src=(id==='__na')?null:(pool.find(z=>z.id===id)||null);
-    const gcv=sum(g,x=>x.cv),gsv=sum(g,x=>x.sv);
-    return{name:src?src.name:'Unassigned',qty:sum(g,x=>x.qty),cv:gcv,sv:gsv,profit:gsv-gcv}}).sort((a,b)=>val(b)-val(a));
-   const tot=sum(arr,a=>val(a))||1;
-   if(tab==='category'&&arr.length){const cols=['#0C6B4A','#B23B2A','#A9720E','#16382A','#5B8A74','#C98A6B','#3E5C4B','#8FA795'];let acc=0;const stops=arr.map((a,i)=>{const s0=acc/tot*100;acc+=val(a);const s1=acc/tot*100;return `${cols[i%cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`}).join(',');
-    body+=`<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none"><div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column"><span class="lbl">${basis==='cost'?'@ cost':'@ sale'}</span><b class="mono" style="font-size:14px">${compact(tot)}</b></div></div>
-    <div style="flex:1;min-width:200px">${arr.map((a,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px"><span style="display:flex;gap:8px;align-items:center"><i class="dot" style="background:${cols[i%cols.length]}"></i>${esc(a.name)}</span><span class="mono muted">${(val(a)/tot*100).toFixed(1)}% · ${money(val(a))}</span></div>`).join('')}</div></div>`}
-   const gmx=Math.max(1,...arr.map(val));
-   body+=arr.length?arr.map(a=>{const v=val(a);
-    return `<div class="brow"><div><span class="bname">${esc(a.name)}</span><span class="bsub">${a.qty} pcs · cost ${money(a.cv)}${co?'':` · sale ${money(a.sv)} · potential ${a.profit>=0?'+':'-'}${money(Math.abs(a.profit))}`}</span></div><div class="btrack"><i style="width:${Math.max(2,v/gmx*100)}%;background:${barCol}"></i></div><div class="bv">${money(v)}</div></div>`}).join(''):emptyHtml('layers','Nothing to value yet')}
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Stock Valuation</div><div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div></div></div>
-  ${co?'':`<div class="tabs" style="margin-bottom:8px">
-   <button class="chip ${basis==='cost'?'on':''}" data-bs="cost">At Cost</button>
-   <button class="chip ${basis==='sale'?'on':''}" data-bs="sale">At Sale Price</button>
-  </div>`}
-  <div class="sumrow">${sumTile('Stock @ cost',money(totC))}${co?sumTile('Units in stock',sum(rows,x=>x.qty)):sumTile('Stock @ sale price',money(totS),'var(--amber)')}${co?'':sumTile('Potential profit',money(totP),totP>=0?'var(--green)':'var(--red)')}${co?'':sumTile('Potential margin',mg.toFixed(1)+'%',mg>=0?'var(--green)':'var(--red)')}</div>
-  ${tabsHtml(key,tab,[['item','Item-wise'],['brand','Brand-wise'],['category','Category-wise'],['subcategory','Subcategory-wise']])}
-  <div class="card cardpad">${body}</div>
-  ${co?'':'<p class="muted" style="font-size:12px;margin-top:10px"><b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets). <b>@ Sale price</b> values the same units at today\'s selling rates — potential revenue if everything sells at list price; the difference is potential gross profit, before discounts and expenses. Items without a brand/category set appear under <b>Unassigned</b>.</p>'}`;
-  qsa('[data-bs]').forEach(b=>b.onclick=()=>{st.basis=b.dataset.bs;draw()});
-  bindTabs(key)};
- draw()}
+function vReportStock() {
+  setTop('Stock Valuation');
+  setActiveNav('r/stock');
+
+  S.report.stock = S.report.stock || {
+    tab: 'item',
+    basis: 'cost'
+  };
+
+  const key = 'stock';
+
+  const draw = () => {
+    const st = S.report[key];
+    const tab = st.tab;
+    const co = S.me.role === 'company';
+    const basis = co ? 'cost' : (st.basis || 'cost');
+
+    // Ensure brands are loaded before drawing brand-wise valuation.
+    if (tab === 'brand' && !BRANDS().length) {
+      DB.collection('brands').get().then(s => {
+        state.brands = s.docs.map(d =>
+          Object.assign({ id: d.id }, d.data())
+        );
+        draw();
+      }).catch(err => {
+        console.error('Failed to load brands:', err);
+      });
+      return;
+    }
+
+    const rows = stockRows().map(x => {
+      const sv = x.qty * (+x.it.saleRate || 0);
+      const cv = x.value;
+
+      return {
+        it: x.it,
+        qty: x.qty,
+        ac: x.ac,
+        cv,
+        sv,
+        profit: sv - cv
+      };
+    });
+
+    const totC = sum(rows, x => x.cv);
+    const totS = sum(rows, x => x.sv);
+    const totP = totS - totC;
+    const mg = totS > 0.004 ? (totP / totS) * 100 : 0;
+
+    const val = x => basis === 'cost' ? x.cv : x.sv;
+    const barCol = basis === 'cost'
+      ? 'var(--green)'
+      : 'var(--amber)';
+
+    let body = '';
+
+    if (tab === 'item') {
+      const arr = rows.slice().sort((a, b) => val(b) - val(a));
+      const mx = Math.max(1, ...arr.map(val));
+
+      body = arr.length
+        ? arr.map(x => {
+            const v = val(x);
+
+            const category = catById(x.it.categoryId);
+            const brand = brandById(x.it.brandId);
+
+            const meta =
+              `${esc(category?.name || '—')} · ` +
+              `${esc(brand?.name || '—')}`;
+
+            const sub = co
+              ? `${meta} · ${x.qty} pcs @ cost ${money(x.ac)}`
+              : basis === 'cost'
+                ? `${meta} · ${x.qty} pcs @ cost ${money(x.ac)} · sale ${money(x.sv)}`
+                : `${meta} · ${x.qty} pcs @ sell ${money(x.it.saleRate)} · cost ${money(x.cv)} · ` +
+                  `<b style="color:${x.profit >= 0 ? 'var(--green)' : 'var(--red)'}">` +
+                  `${x.profit >= 0 ? 'profit' : 'loss'} ${money(Math.abs(x.profit))}</b>`;
+
+            return `
+              <div class="brow">
+                <div>
+                  <span class="bname">${esc(x.it.name)}</span>
+                  <span class="bsub">${sub}</span>
+                </div>
+                <div class="btrack">
+                  <i style="width:${Math.max(2, v / mx * 100)}%;background:${barCol}"></i>
+                </div>
+                <div class="bv">${money(v)}</div>
+              </div>`;
+          }).join('') +
+          `<div class="trow grand" style="max-width:420px;margin-left:auto">
+            <span class="lbl">${basis === 'cost' ? 'Total stock @ cost' : 'Total stock @ sale price'}</span>
+            <b style="font-size:17px">${money(basis === 'cost' ? totC : totS)}</b>
+          </div>`
+        : emptyHtml('box', 'No items yet');
+
+    } else {
+      const dim = tab === 'brand' ? 'brandId' : 'categoryId';
+      const pool = dim === 'brand' ? BRANDS() : CATS();
+
+      // Normalize IDs to strings and trim accidental whitespace.
+      const groups = groupBy(rows, x => {
+        const id = String(x.it?.[dim] ?? '').trim();
+        return id || '__na';
+      });
+
+      const arr = Object.keys(groups).map(id => {
+        const g = groups[id];
+
+       
+const normalizedId = String(id).trim();
+
+const src = id === '__na'
+  ? null
+  : (
+      dim === 'brand'
+        ? BRANDS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
+        : CATS().find(z =>
+            String(z.id).trim() === normalizedId
+          )
+    ) || null;
+        const gcv = sum(g, x => x.cv);
+        const gsv = sum(g, x => x.sv);
+
+        return {
+
+name: id === '__na'
+  ? 'Unassigned'
+  : (
+      tab === 'brand'
+        ? (
+            BRANDS().find(b =>
+              String(b.id).trim() === String(id).trim()
+            )?.name || brandById(String(id).trim())?.name || String(id)
+          )
+        : (
+            CATS().find(c =>
+              String(c.id).trim() === String(id).trim()
+            )?.name || catById(String(id).trim())?.name || String(id)
+          )
+    ),          
+          qty: sum(g, x => x.qty),
+          cv: gcv,
+          sv: gsv,
+          profit: gsv - gcv
+        };
+      }).sort((a, b) => val(b) - val(a));
+
+      const tot = sum(arr, a => val(a)) || 1;
+
+      // Category-wise chart.
+      if (tab === 'category' && arr.length) {
+        const cols = [
+          '#0C6B4A', '#B23B2A', '#A9720E', '#16382A',
+          '#5B8A74', '#C98A6B', '#3E5C4B', '#8FA795'
+        ];
+
+        let acc = 0;
+
+        const stops = arr.map((a, i) => {
+          const s0 = acc / tot * 100;
+          acc += val(a);
+          const s1 = acc / tot * 100;
+
+          return `${cols[i % cols.length]} ${s0.toFixed(1)}% ${s1.toFixed(1)}%`;
+        }).join(',');
+
+        body += `
+          <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+            <div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(${stops});position:relative;flex:none">
+              <div style="position:absolute;inset:26px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column">
+                <span class="lbl">${basis === 'cost' ? '@ cost' : '@ sale'}</span>
+                <b class="mono" style="font-size:14px">${compact(tot)}</b>
+              </div>
+            </div>
+            <div style="flex:1;min-width:200px">
+              ${arr.map((a, i) => `
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px">
+                  <span style="display:flex;gap:8px;align-items:center">
+                    <i class="dot" style="background:${cols[i % cols.length]}"></i>
+                    ${esc(a.name)}
+                  </span>
+                  <span class="mono muted">${(val(a) / tot * 100).toFixed(1)}% · ${money(val(a))}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      }
+
+      const gmx = Math.max(1, ...arr.map(val));
+
+      body += arr.length
+        ? arr.map(a => {
+            const v = val(a);
+
+            return `
+              <div class="brow">
+                <div>
+                  <span class="bname">${esc(a.name)}</span>
+                  <span class="bsub">
+                    ${a.qty} pcs · cost ${money(a.cv)}${co ? '' :
+                      ` · sale ${money(a.sv)} · potential ${a.profit >= 0 ? '+' : '-'}${money(Math.abs(a.profit))}`}
+                  </span>
+                </div>
+                <div class="btrack">
+                  <i style="width:${Math.max(2, v / gmx * 100)}%;background:${barCol}"></i>
+                </div>
+                <div class="bv">${money(v)}</div>
+              </div>`;
+          }).join('')
+        : emptyHtml('layers', 'Nothing to value yet');
+    }
+
+    V().innerHTML = `
+      <div class="pagehead">
+        <div>
+          <div class="ptitle">Stock Valuation</div>
+          <div class="psub">Weighted-average cost vs current sale price · includes admin stock adjustments</div>
+        </div>
+      </div>
+
+      ${co ? '' : `
+        <div class="tabs" style="margin-bottom:8px">
+          <button class="chip ${basis === 'cost' ? 'on' : ''}" data-bs="cost">At Cost</button>
+          <button class="chip ${basis === 'sale' ? 'on' : ''}" data-bs="sale">At Sale Price</button>
+        </div>`}
+
+      <div class="sumrow">
+        ${sumTile('Stock @ cost', money(totC))}
+        ${co
+          ? sumTile('Units in stock', sum(rows, x => x.qty))
+          : sumTile('Stock @ sale price', money(totS), 'var(--amber)')}
+        ${co ? '' : sumTile('Potential profit', money(totP), totP >= 0 ? 'var(--green)' : 'var(--red)')}
+        ${co ? '' : sumTile('Potential margin', mg.toFixed(1) + '%', mg >= 0 ? 'var(--green)' : 'var(--red)')}
+      </div>
+
+      ${tabsHtml(key, tab, [
+        ['item', 'Item-wise'],
+        ['brand', 'Brand-wise'],
+        ['category', 'Category-wise']
+      ])}
+
+      <div class="card cardpad">${body}</div>
+
+      ${co ? '' : `
+        <p class="muted" style="font-size:12px;margin-top:10px">
+          <b>@ Cost</b> values stock at weighted-average purchase cost — what you own (assets).
+          <b>@ Sale price</b> values the same units at today's selling rates — potential revenue
+          if everything sells at list price; the difference is potential gross profit, before
+          discounts and expenses. Items without a brand/category set appear under
+          <b>Unassigned</b>.
+        </p>`}`;
+
+    qsa('[data-bs]').forEach(b => {
+      b.onclick = () => {
+        st.basis = b.dataset.bs;
+        draw();
+      };
+    });
+
+    bindTabs(key);
+  };
+
+  draw();
+}
+
 
 function vReportSales(){setTop('Sales Analysis');setActiveNav('r/sales');S.report.sales=S.report.sales||{preset:'month',tab:'date',...mk(presetRange('month'))};
  const key='sales';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
@@ -1797,51 +1840,41 @@ function vReportPayment(){setTop('Payment Analysis');setActiveNav('r/payment');S
   <div class="card cardpad">${body}</div>`;
   bindRange(key);bindTabs(key)};
  draw()}
-function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');
- S.report.profit=S.report.profit||{preset:'month',tab:'date',...mk(presetRange('month'))};
- const key='profit';const draw=()=>{
-  const r=S.report[key],f=r.from,t=r.to;
+function vReportProfit(){setTop('Profit Analysis');setActiveNav('r/profit');S.report.profit=S.report.profit||{preset:'month',tab:'date',...mk(presetRange('month'))};
+ const key='profit';const draw=()=>{const r=S.report[key],f=r.from,t=r.to;
   const ac={};const AC=id=>ac[id]||(ac[id]=avgCost(itemById(id)));
   const invs=SALES().filter(d=>inR(d.date,f,t)),rets=SRET().filter(d=>inR(d.date,f,t));
   let rev=0,cogs=0;const rows=[];
   const push=(dimK,net,cost)=>{let row=rows.find(x=>x.k===dimK);if(!row){row={k:dimK,rev:0,cogs:0};rows.push(row)}row.rev+=net;row.cogs+=cost};
-  const brandOf=it=>{if(!it)return 'No brand';if(it.brandId){const b=brandById(it.brandId);if(b&&b.name)return b.name}return it.brand||it.brandName||'No brand'};
-  const subOf=it=>{if(!it)return 'No subcategory';const v=it.subCategory||it.subcategory||it.subCat||it.sub;if(v)return v;if(it.subCategoryId){const c=catById(it.subCategoryId);if(c&&c.name)return c.name}return 'No subcategory'};
-  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0)),c=(+l.qty||0)*AC(l.itemId);rev+=net;cogs+=c;
-   push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c);
-   push('p:'+(d.partyId||'—'),net,c);push('b:'+brandOf(it),net,c);push('s:'+subOf(it),net,c)})});
-  rets.forEach(rt=>{LINES(rt).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=(+l.qty||0)*(+l.rate||0),c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=net;cogs-=c;
-   push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c);
-   push('p:'+(rt.partyId||'—'),-net,-c);push('b:'+brandOf(it),-net,-c);push('s:'+subOf(it),-net,-c)})});
+  invs.forEach(d=>{const sub=docSub(d);LINES(d).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const g=(+l.qty||0)*(+l.rate||0),net=g-((+d.discount||0)*(sub?g/sub:0)),c=(+l.qty||0)*AC(l.itemId);rev+=net;cogs+=c;push('d:'+d.date,net,c);push('i:'+l.itemId,net,c);push('c:'+(it.categoryId||'—'),net,c)})});
+  rets.forEach(rt=>{LINES(rt).forEach(l=>{const it=itemById(l.itemId);if(!it)return;const net=(+l.qty||0)*(+l.rate||0),c=rt.goodsBack!==false?(+l.qty||0)*AC(l.itemId):0;rev-=net;cogs-=c;push('d:'+rt.date,-net,-c);push('i:'+l.itemId,-net,-c);push('c:'+(it.categoryId||'—'),-net,-c)})});
   const profit=rev-cogs,margin=rev>0?profit/rev*100:0;
-  const label=k=>k.startsWith('d:')?fmtDate(k.slice(2)):k.startsWith('i:')?(itemById(k.slice(2))?.name||'—'):k.startsWith('c:')?(catById(k.slice(2))?.name||'—'):k.startsWith('p:')?(partyById(k.slice(2))?.name||'Walk-in / Counter'):k.slice(2);
-  let body='';const tab=r.tab,pre={date:'d:',item:'i:',category:'c:',party:'p:',brand:'b:',subcat:'s:'}[tab];
+  const label=k=>k.startsWith('d:')?fmtDate(k.slice(2)):k.startsWith('i:')?(itemById(k.slice(2))?.name||'—'):(catById(k.slice(2))?.name||'—');
+  let body='';const tab=r.tab,pre={date:'d:',item:'i:',category:'c:'}[tab];
   const arr=rows.filter(x=>x.k.startsWith(pre)).sort((a,b)=>(b.rev-b.cogs)-(a.rev-a.cogs));
   const mx=Math.max(1,...arr.map(x=>Math.abs(x.rev-x.cogs)));
   body=arr.length?arr.map(x=>{const pr=x.rev-x.cogs;return `<div class="brow"><div><span class="bname">${esc(label(x.k))}</span><span class="bsub">rev ${money(x.rev)} · cogs ${money(x.cogs)}</span></div><div class="btrack"><i style="width:${Math.abs(pr)/mx*100}%;background:${pr>=0?'var(--green)':'var(--red)'}"></i></div><div class="bv" style="color:${pr>=0?'var(--green)':'var(--red)'}">${money(pr)}</div></div>`}).join(''):emptyHtml('chart','No sales in this period');
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Profit Analysis</div><div class="psub">Gross margin on weighted-average cost · ${fmtDate(f)} → ${fmtDate(t)}</div></div></div>
   ${rangeBar(key)}
   <div class="sumrow">${sumTile('Net revenue',money(rev))}${sumTile('Cost of goods',money(cogs))}${sumTile('Gross profit',money(profit),profit>=0?'var(--green)':'var(--red)')}${sumTile('Margin',margin.toFixed(1)+'%',margin>=0?'var(--green)':'var(--red)')}</div>
-  ${tabsHtml(key,r.tab,[['date','Date-wise'],['item','Item-wise'],['category','Category-wise'],['party','Party-wise'],['brand','Brand-wise'],['subcat','Sub-category-wise']])}
+  ${tabsHtml(key,r.tab,[['date','Date-wise'],['item','Item-wise'],['category','Category-wise']])}
   <div class="card cardpad">${body}</div>
   <p class="muted" style="font-size:12px;margin-top:10px">Credit-only returns reduce revenue without returning stock; cash operating expenses and overheads are not included — this is trading gross profit.</p>`;
   bindRange(key);bindTabs(key)};
  draw()}
 
 function vOrders(){setTop('Orders');setActiveNav('orders');S.draftOrder=null;
- let q='',f='all',page=1,size=50;
+ let q='',f='all';
  const draw=()=>{const os=ORDERS().slice().sort((a,b)=>(b.created||0)-(a.created||0));
   const counts={all:os.length};os.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);
   const fl=os.filter(o=>(f==='all'||o.status===f)&&(!q||(o.no+' '+(partyById(o.partyId)?.name||'')).toLowerCase().includes(q)));
-  const pg=pageSlice(fl,page,size);page=pg.page;
   V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Orders</div><div class="psub">${fl.length} orders · from the customer portal · updates live</div></div></div>
   <div class="tabs">${['all','new','confirmed','delivered','invoiced','cancelled'].map(s=>`<button class="chip ${f===s?'on':''}" data-of="${s}">${s==='all'?'All':OSTAT[s][0]}${counts[s]?` <span class="mono" style="opacity:.7">${counts[s]}</span>`:''}</button>`).join('')}</div>
   <div class="searchbar">${ic('search',17)}<input class="in" id="oq" placeholder="Search order no. or customer…" value="${esc(q)}"></div>
-  <div class="card"><div class="list">${fl.length?pg.rows.map(o=>{const p=partyById(o.partyId);
-   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${LINES(o).length} item${LINES(o).length>1?'s':''}</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders here</div>Orders placed by customers appear instantly.</div>`}</div>${pagerHtml(pg.total,page,size)}</div>`;
-  bindPager(n=>{page=n;draw()},n=>{size=n;page=1;draw()});
-  qsa('[data-of]').forEach(b=>b.onclick=()=>{f=b.dataset.of;page=1;draw()});
-  $('#oq').oninput=e=>{q=e.target.value.toLowerCase();page=1;const pos=e.target.selectionStart;draw();const n=$('#oq');n.focus();n.setSelectionRange(pos,pos)};
+  <div class="card"><div class="list">${fl.length?fl.map(o=>{const p=partyById(o.partyId);
+   return `<div class="lrow" data-id="${o.id}"><div class="lmain"><div class="lname"><span class="mono" style="font-size:13px">${esc(o.no)}</span>${ostBadge(o.status)}</div><div class="lsub"><span>${esc(p?p.name:'—')}</span><span>·</span><span>${LINES(o).length} item${LINES(o).length>1?'s':''}</span><span>·</span><span>${timeAgo(o.created)}</span></div></div><div class="lright"><div class="lamt">${money(o.total)}</div><div class="lmeta">${fmtDate(o.date)}</div></div></div>`}).join(''):`<div class="empty">${ic('order',34)}<div class="big">No orders here</div>Orders placed by customers appear instantly.</div>`}</div></div>`;
+  qsa('[data-of]').forEach(b=>b.onclick=()=>{f=b.dataset.of;draw()});
+  $('#oq').oninput=e=>{q=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();const n=$('#oq');n.focus();n.setSelectionRange(pos,pos)};
   qsa('.lrow').forEach(r=>r.onclick=()=>go('orders/'+r.dataset.id))};
  draw()}
 function setOrderStatus(id,status,by){const o=dbGet('orders',id);if(!o)return;
@@ -1864,7 +1897,7 @@ function vOrderDetail(id,isCustomer){const o=dbGet('orders',id);
  <div class="card" style="margin-bottom:14px"><div class="cardpad">
    <div class="lgrow hdr"><span>Item</span><span style="text-align:right">Qty</span><span style="text-align:right">Rate</span><span style="text-align:right">Amount</span></div>
    ${LINES(o).map(l=>{const it=itemById(l.itemId);const so=it?stockOf(it.id):0;
-    return `<div class="lgrow"><span class="ld"><span class="ldwrap">${itemThumb(it,34)}<span class="ldtxt"><b>${esc(it?it.name:'?')}</b><span class="lsub">${(!isCustomer&&it&&l.qty>so)?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(categoryLabel(it))}</span></span></span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
+    return `<div class="lgrow"><span class="ld"><span class="ldwrap">${itemThumb(it,34)}<span class="ldtxt"><b>${esc(it?it.name:'?')}</b><span class="lsub">${(!isCustomer&&it&&l.qty>so)?`<span style="color:var(--red)">only ${so} in stock now</span>`:esc(catById(it?.categoryId)?.name||'')}</span></span></span></span><span class="num">${l.qty}</span><span class="num">${money(l.rate)}</span><span class="num" style="font-weight:600">${money((+l.qty||0)*(+l.rate||0))}</span></div>`}).join('')}
    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;max-width:320px;margin-left:auto">
      <div class="trow grand"><span>Order total</span><b style="font-size:18px">${money(o.total)}</b></div>
    </div>
@@ -1908,7 +1941,7 @@ function openShopItem(it){if(!it)return;const so=stockOf(it.id);let q=1;
  <div class="mbody"><div class="pmgrid">
   <div>${stage}</div>
   <div>
-   <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(categoryLabel(it))}</div>
+   <div class="pbrand" style="margin-bottom:2px">${esc(brandById(it.brandId)?.name||'')} · ${esc(catById(it.categoryId)?.name||'')}</div>
    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
      <span class="pprice" style="font-size:20px">${money(it.saleRate)}</span>
      <span class="badge ${so<=0?'b-red':'b-green'}">${so<=0?'Out of stock':'In stock'}</span>
@@ -1991,7 +2024,7 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
     <div class="lmain"><div class="lname">${esc(t.name)}</div><div class="lsub"><span class="mono">${esc(t.mobile||'—')}</span></div></div>
     <span class="badge ${t.role==='super'?'b-amber':t.role==='admin'?'b-green':'b-gray'}">${t.role==='super'?'Super admin':t.role==='company'?'Company':t.role}</span>
     <span class="badge ${t.active!==false?'b-green':'b-gray'}">${t.active!==false?'Active':'Off'}</span>
-    ${canTouch(t)?`<div style="display:flex;gap:6px;flex-wrap:wrap">${t.role==='company'?`<button class="btn btn-ghost btn-sm" data-brands="${t.id}">Allocate brands</button>`:''}<button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
+    ${canTouch(t)?`<div style="display:flex;gap:6px"><button class="icon-btn" data-pw="${t.id}" title="Reset password">${ic('gear',15)}</button><button class="icon-btn" data-tg="${t.id}">${ic(t.active!==false?'x':'check',15)}</button><button class="icon-btn" data-del="${t.id}" style="color:var(--red)">${ic('trash',15)}</button></div>`:''}</div>`}).join(''):`<div class="empty">No team accounts yet.</div>`}</div></div>
    <p class="muted" style="font-size:12px;margin-top:10px">Tip: use <b>Invites</b> when someone signs in on their own device — they choose their own password privately.</p>`}
   else if(tab==='customers'){body=`<button class="btn btn-primary" id="tcNew" style="margin-bottom:12px">${ic('plus',16)}Create customer login</button>
    <div class="card"><div class="list">${custs.length?custs.map(t=>{const p=partyById(t.partyId);const bal=p?partyBalance(p.id):0;const ini=t.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
@@ -2030,7 +2063,6 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
   qsa('[data-rej]').forEach(b=>b.onclick=()=>confirmBox('Reject request?','They will be asked to contact you directly.',()=>{dbUpdate('regRequests',b.dataset.rej,{status:'rejected'})}));
   qsa('[data-cp]').forEach(b=>b.onclick=()=>copyText(b.dataset.cp));
   qsa('[data-rv]').forEach(b=>b.onclick=()=>confirmBox('Revoke this invite?','The code will stop working immediately.',()=>{dbDel('invites',b.dataset.rv);toast('Invite revoked')}));
-  qsa('[data-brands]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.brands);if(t)openBrandAllocationModal(t)});
   qsa('[data-pw]').forEach(b=>b.onclick=()=>openResetPwModal(USERS().find(x=>x.id===b.dataset.pw)));
   qsa('[data-resetm]').forEach(b=>b.onclick=()=>{const u2=USERS().find(x=>x.mobile===b.dataset.resetm);if(u2)openResetPwModal(u2,RESETS().find(r=>r.mobile===u2.mobile&&r.status==='pending')?.id)});
   qsa('[data-tg]').forEach(b=>b.onclick=()=>{const t=USERS().find(x=>x.id===b.dataset.tg);
@@ -2041,22 +2073,6 @@ function vUsers(){setTop('Users & Customers');setActiveNav('users');
    if(t.role==='super'&&USERS().filter(x=>x.role==='super'&&x.active!==false).length<=1)return toast('Last super admin cannot be removed','err');
    confirmBox('Remove '+t.name+'?','They will immediately lose access.',()=>{dbDel('users',t.id);if(t.mobile)dbDel('logins',t.mobile);toast('Account removed')})})};
  draw()}
-function openBrandAllocationModal(user){
- if(!user||user.role!=='company')return;
- const current=Array.isArray(user.brandIds)?user.brandIds:(Array.isArray(user.assignedBrandIds)?user.assignedBrandIds:[]);
- const brands=BRANDS().slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
- openModal(`<div class="mhead"><h3>Allocate brands · ${esc(user.name)}</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
- <div class="mbody"><p class="muted" style="font-size:13px;margin-bottom:12px">Select which brands this company account can see on Stock Valuation. Only selected brands will be included in its valuation totals.</p>
- <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" id="baAll">Select all</button><button type="button" class="btn btn-ghost btn-sm" id="baNone">Clear all</button></div>
- <div id="baList" style="max-height:45vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px">${brands.length?brands.map(b=>`<label style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px dashed var(--line)"><input type="checkbox" class="ba-brand" value="${esc(b.id)}" ${current.includes(b.id)?'checked':''} style="width:18px;height:18px"><span>${esc(b.name||'Unnamed brand')}</span></label>`).join(''):`<div class="empty">No brands have been created yet.</div>`}</div>
- <div class="savebar"><button type="button" class="btn btn-ghost" id="baCancel">Cancel</button><button type="button" class="btn btn-primary" id="baSave">Save allocation</button></div></div>`);
- const checks=()=>qsa('.ba-brand');
- const all=$('#baAll'),none=$('#baNone'),save=$('#baSave'),cancel=$('#baCancel');
- if(all)all.onclick=()=>checks().forEach(c=>c.checked=true);
- if(none)none.onclick=()=>checks().forEach(c=>c.checked=false);
- if(cancel)cancel.onclick=closeModal;
- if(save)save.onclick=async()=>{const ids=checks().filter(c=>c.checked).map(c=>c.value);save.disabled=true;save.textContent='Saving…';try{await DB.collection('users').doc(user.id).set({brandIds:ids,assignedBrandIds:ids,brandAllocationUpdatedAt:Date.now()},{merge:true});user.brandIds=ids;user.assignedBrandIds=ids;if(S.me&&S.me.id===user.id){S.me.brandIds=ids;S.me.assignedBrandIds=ids}closeModal();toast(`Brand allocation saved (${ids.length})`);route()}catch(e){console.error('brand allocation save failed',e);toast('Could not save brand allocation: '+(e.code||e.message),'err');save.disabled=false;save.textContent='Save allocation'}};
-}
 async function openInviteModal(){const me=S.me;
  const roles=me.role==='super'?[['staff','Staff'],['company','Company · figures only'],['admin','Admin']]:[['staff','Staff'],['company','Company · figures only']];
  openModal(`<div class="mhead"><h3>New invite code</h3><button class="icon-btn" onclick="closeModal()">${ic('x')}</button></div>
@@ -2092,10 +2108,10 @@ async function openTeamModal(){const me=S.me;
   if(pw.length<4)return err('Password too short');
   if(role==='super'&&me.role!=='super')return err('Only a super admin can create another super admin');
   try{
-   const res=await createAuthUser(mobileToEmail(mob),pw);
+   const newUid=await createAuthUser(mobileToEmail(mob),pw);
    const batch=DB.batch();
-   batch.set(DB.collection('users').doc(res.uid),{name,mobile:mob,role,active:true,created:Date.now()});
-   batch.set(DB.collection('logins').doc(mob),{email:res.email});
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
    closeModal();toast('Account created — ID: '+mob);route()}
   catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
@@ -2129,10 +2145,10 @@ async function openCustomerModal(){
    let pid;
    if(isNew){pid=dbAdd('parties',{name,type:'customer',phone:mob,address:'',openingBalance:0,openingType:'dr'}).id}
    else{pid=pickedPid}
-   const res=await createAuthUser(mobileToEmail(mob),pw);
+   const newUid=await createAuthUser(mobileToEmail(mob),pw);
    const batch=DB.batch();
-   batch.set(DB.collection('users').doc(res.uid),{name,mobile:mob,role:'customer',partyId:pid,active:true,created:Date.now()});
-   batch.set(DB.collection('logins').doc(mob),{email:res.email});
+   batch.set(DB.collection('users').doc(newUid),{name,mobile:mob,role:'customer',partyId:pid,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mob),{email:mobileToEmail(mob)});
    await batch.commit();
    closeModal();toast('Customer login created — ID: '+mob);route()}
   catch(ex){err(ex.code==='auth/email-already-in-use'?'This mobile number already has an account.':'Failed: '+ex.code)}}}
@@ -2151,10 +2167,10 @@ function openApproveModal(reqId,mobile,name,city){
   if(pw.length<4)return err('Password too short');
   try{
    const pid=dbAdd('parties',{name:nm,type:'customer',phone:ph,address:city,openingBalance:0,openingType:'dr'}).id;
-   const res=await createAuthUser(mobileToEmail(mobile),pw);
+   const newUid=await createAuthUser(mobileToEmail(mobile),pw);
    const batch=DB.batch();
-   batch.set(DB.collection('users').doc(res.uid),{name:nm,mobile,role:'customer',partyId:pid,active:true,created:Date.now()});
-   batch.set(DB.collection('logins').doc(mobile),{email:res.email});
+   batch.set(DB.collection('users').doc(newUid),{name:nm,mobile,role:'customer',partyId:pid,active:true,created:Date.now()});
+   batch.set(DB.collection('logins').doc(mobile),{email:mobileToEmail(mobile)});
    batch.update(DB.collection('regRequests').doc(reqId),{status:'approved',approvedTs:Date.now()});
    await batch.commit();
    closeModal();toast('Customer approved — login created: '+mobile);route()}
@@ -2188,7 +2204,7 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
    <button class="btn btn-primary" style="width:100%">Save settings</button></form></div></div>
  <div>
    <div class="card" style="margin-bottom:14px"><div class="cardhead"><span class="lbl">Data & backup</span></div><div class="cardpad">
-     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in Google Firestore — safe from device loss. Export a JSON backup for your records (includes expenses & journals), or import one (imported accounts need a password reset in Users to activate sign-in).</p>
+     <p class="muted" style="font-size:13px;margin-bottom:12px">Books live in Google Firestore — safe from device loss. Export a JSON backup for your records, or import one (imported accounts need a password reset in Users to activate sign-in).</p>
      <div style="display:flex;gap:10px;flex-wrap:wrap">
        <button class="btn btn-ghost" id="expBtn">${ic('down',16)}Export backup</button>
        <button class="btn btn-ghost" id="impBtn">${ic('up',16)}Import backup</button>
@@ -2201,13 +2217,12 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
      <div class="lgrow"><span class="ld"><b>Documents</b><span>sales · purchases · returns</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${SALES().length+PURCHASES().length+SRET().length+PRET().length}</span></div>
      <div class="lgrow"><span class="ld"><b>Orders</b><span>customer portal</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${ORDERS().filter(o=>o.status==='new').length} waiting / ${ORDERS().length} total</span></div>
      <div class="lgrow"><span class="ld"><b>Parties</b><span>customers & suppliers</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${PARTIES().length}</span></div>
-     <div class="lgrow"><span class="ld"><b>Expenses / Journals</b><span>day-to-day records</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${(state.expenses||[]).length} / ${(state.journals||[]).length}</span></div>
      <div class="lgrow"><span class="ld"><b>Items</b><span>catalogue</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600">${ITEMS().length}</span></div>
      <div class="lgrow" style="border:0"><span class="ld"><b>Stock value</b><span>weighted average</span></span><span class="num" style="grid-column:span 3;text-align:right;font-weight:600;color:var(--green)">${money(sum(stockRows(),r=>r.value))}</span></div>
    </div></div>
  </div></div>`;
  $('#stForm').onsubmit=e=>{e.preventDefault();const n=SET();n.businessName=$('#st-biz').value.trim()||n.businessName;n.currency=$('#st-cur').value.trim()||'₹';n.currencyWord=$('#st-cw').value.trim();n.phone=$('#st-ph').value.trim();n.address=$('#st-ad').value.trim();saveSet(n);toast('Settings saved — live on all devices')};
- $('#expBtn').onclick=async()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES(),regRequests:(state.regReqs||[]),expenses:(state.expenses||[]),expenseHeads:(state.expenseHeads||[]),journals:(state.journals||[])};
+ $('#expBtn').onclick=async()=>{const data={settings:SET(),users:USERS(),parties:PARTIES(),categories:CATS(),brands:BRANDS(),items:ITEMS(),sales:SALES(),purchases:PURCHASES(),saleReturns:SRET(),purchaseReturns:PRET(),receipts:RECEIPTS(),payments:PAYMENTS(),orders:ORDERS(),stockAdj:ADJ(),pwResets:RESETS(),invites:INVITES()};
   try{const lg=await DB.collection('logins').get();data.logins=lg.docs.map(d=>Object.assign({id:d.id},d.data()))}catch(e){}
   const b=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='munshi-backup-'+todayISO()+'.json';a.click();toast('Backup downloaded')};
  $('#impBtn').onclick=()=>$('#impFile').click();
@@ -2220,7 +2235,6 @@ function vSettings(){setTop('Settings');setActiveNav('settings');const s=SET(),u
     if(d.settings.counters)await DB.collection('settings').doc('counters').set(d.settings.counters);
     for(const c of COLLECTION_KEYS){
      if(Array.isArray(d[c])&&d[c].length)await bulkWrite(c,d[c])}
-    if(Array.isArray(d.regRequests)&&d.regRequests.length)await bulkWrite('regRequests',d.regRequests);
     if(Array.isArray(d.logins)&&d.logins.length)await bulkWrite('logins',d.logins);
     for(const usr of (d.users||[])){if(usr.mobile)await DB.collection('logins').doc(String(usr.mobile)).set({email:mobileToEmail(String(usr.mobile))},{merge:true})}
     toast('Import complete — reset passwords in Users to activate sign-ins')})}
@@ -2248,7 +2262,7 @@ async function seedDemo(){
  const custIds=customers.map(c=>c.id),supIds=suppliers.map(c=>c.id),modes=['Cash','UPI','Bank','Card'];
  const demoParty=customers[1];
  let demoUid='demo-cust';
- try{demoUid=(await createAuthUser('9999900000@munshi.app','1234')).uid;
+ try{demoUid=await createAuthUser('9999900000@munshi.app','1234');
   const db2=DB.batch();
   db2.set(DB.collection('users').doc(demoUid),{name:'Gupta Telecom (Demo)',mobile:'9999900000',role:'customer',partyId:demoParty.id,active:true,created:Date.now()});
   db2.set(DB.collection('logins').doc('9999900000'),{email:'9999900000@munshi.app'});
@@ -2350,523 +2364,9 @@ window.closeModal=closeModal;
    await new Promise(r=>setTimeout(r,450));
    S.booting=false;renderShell();
    const cur=(location.hash||'').replace(/^#\//,'').split('/')[0];
-   if(['login','setup','join','register'].includes(cur)||!cur)go(me.role==='customer'?'shop':'dash');else route();
+   if(['login','setup','join'].includes(cur)||!cur)go(me.role==='customer'?'shop':'dash');else route();
   }catch(e){console.error(e);S.booting=false;showFatal('Connection problem: '+(e.code||e.message)+' — check internet and refresh.')}
  });
-})();
-</script>
-
-
-
-
-<script>
-/* ==================================================================
-   MUNSHI UPGRADE LAYER v3.12 (merged edition)
-   • Brand-scoped COMPANY users (reads brandIds array, live re-allocation)
-   • Expenses · Journal Vouchers · Item Purchase History tools
-   • Last-purchase rate hints + auto-fill on purchase form
-   • Add-a-row focus behaviour
-   • Critical fix: hashchange listener re-bound so tool links work
-   (journal entries already integrated into partyEntries/balancesMap and
-    the backup export in the main script — no wrappers needed here)
-   ================================================================== */
-(function(){
-'use strict';
-try{
-
-/* ============ CONFIG ============ */
-const COMPANY_CFG={
-  allowedRoutes:['r/stock','sales','collections','purchases'],
-  homeRoute:'r/stock',
-  includePurchaseDocs:true   /* keep brand purchases → avgCost math stays correct */
-};
-const AUTO_LAST_RATE_ON_PURCHASE=true;
-/* ================================ */
-
-/* ---------- helpers ---------- */
-const UI_TRASH='<svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/></svg>';
-const UI_PEN='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l4-1L20 7l-3-3L5 16l-1 4z"/></svg>';
-const UI_SVG={
-  exp:'<svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4.5h14v15H5z"/><path d="M8.5 9.5h7"/><path d="M8.5 13h7"/><path d="M8.5 16.5h4"/></svg>',
-  jv:'<svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h11"/><path d="M12 4.5 15.5 8 12 11.5"/><path d="M20 16H9"/><path d="M12 12.5 8.5 16l3.5 3.5"/></svg>',
-  hist:'<svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8 21 21"/><path d="M8.5 11h5"/><path d="M11 8.5v5"/></svg>'
-};
-function doubleRaf(fn){requestAnimationFrame(()=>requestAnimationFrame(fn))}
-
-/* ---------- upgrade modal helper ---------- */
-function uiModal(title,body,foot){
-  document.getElementById('modalRoot').innerHTML=
-   `<div class="mask" data-uimodal onclick="if(event.target===this)window.__uiClose()"><div class="modal">
-     <div class="mhead"><h3>${esc(title)}</h3><button class="icon-btn" onclick="window.__uiClose()">✕</button></div>
-     <div class="mbody">${body}</div>${foot?`<div class="mfoot">${foot}</div>`:''}</div></div>`;
-  document.body.classList.add('locked');
-  const f=document.querySelector('#modalRoot input,#modalRoot select,#modalRoot .btn');
-  if(f)setTimeout(()=>{try{f.focus()}catch(e){}},60);
-}
-window.__uiClose=function(){document.getElementById('modalRoot').innerHTML='';document.body.classList.remove('locked')};
-new MutationObserver(()=>{if(!document.getElementById('modalRoot').innerHTML)document.body.classList.remove('locked')})
-  .observe(document.getElementById('modalRoot'),{childList:true});
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&document.querySelector('#modalRoot [data-uimodal]')){e.stopPropagation();window.__uiClose()}
-},true);
-
-/* ========== BRAND-SCOPED COMPANY USER (reads brandIds ARRAY) ========== */
-const isCompany=()=>!!(S.me&&S.me.role==='company');
-function myBrandIds(){
-  if(!isCompany())return [];
-  for(const f of ['brandIds','assignedBrandIds','brands']){
-    if(Array.isArray(S.me[f])&&S.me[f].length)return S.me[f].map(x=>String(x)).filter(Boolean);
-  }
-  for(const f of ['brandId','brand','brandName']){if(S.me[f])return [String(S.me[f])]}
-  return [];
-}
-function itemBrandKey(it){
-  if(!it)return '';
-  if(it.brandId)return String(it.brandId);
-  if(it.brand)return String(it.brand);
-  if(it.brandName)return String(it.brandName);
-  return '';
-}
-const RAW={};let noBrandWarned=false;
-function recomputeCompany(){
-  const bids=myBrandIds();const set=new Set(bids);
-  if(!bids.length){
-    if(!noBrandWarned){noBrandWarned=true;
-      console.warn('UPGRADE: company user has NO brand allocation. Admin → Users → Allocate brands.')}
-    ['items','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj']
-      .forEach(c=>state[c]=[]);
-    return;
-  }
-  const allItems=RAW.items||[];
-  const items=allItems.filter(it=>set.has(itemBrandKey(it)));
-  const itemOk=id=>{const it=allItems.find(x=>x.id===id);return !!it&&set.has(itemBrandKey(it))};
-  /* strict: a doc is visible only if EVERY line belongs to this brand (privacy) */
-  const linesOk=d=>LINES(d).length>0&&LINES(d).every(l=>itemOk(l.itemId));
-  state.items=items;
-  state.brands=(RAW.brands||[]).filter(b=>set.has(b.id));
-  state.categories=RAW.categories||[];
-  state.sales=(RAW.sales||[]).filter(linesOk);
-  state.saleReturns=(RAW.saleReturns||[]).filter(linesOk);
-  state.purchases=COMPANY_CFG.includePurchaseDocs?(RAW.purchases||[]).filter(linesOk):[];
-  state.purchaseReturns=COMPANY_CFG.includePurchaseDocs?(RAW.purchaseReturns||[]).filter(linesOk):[];
-  state.stockAdj=(RAW.stockAdj||[]).filter(a=>a&&itemOk(a.itemId));
-  const partyIds=new Set();
-  state.sales.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
-  state.saleReturns.forEach(s=>{if(s.partyId)partyIds.add(s.partyId)});
-  state.receipts=(RAW.receipts||[]).filter(r=>r.partyId&&partyIds.has(r.partyId));
-  state.parties=(RAW.parties||[]).filter(p=>partyIds.has(p.id));
-  state.payments=[];state.orders=[];state.users=[];
-}
-function subscribeCompany(){
-  const COLS=['items','categories','brands','parties','sales','purchases','saleReturns','purchaseReturns','receipts','stockAdj','expenses','expenseHeads','journals'];
-  const sub=c=>{S.unsubs.push(DB.collection(c).onSnapshot(snap=>{
-    RAW[c]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
-    recomputeCompany();onLive();
-  },err=>{if(err.code!=='permission-denied')console.error(c,err)}))};
-  COLS.forEach(sub);
-  /* live allocation: admin changes brands → refilter without re-login */
-  if(S.me&&S.me.id){S.unsubs.push(DB.collection('users').doc(S.me.id).onSnapshot(s=>{
-    if(s.exists){S.me=Object.assign({},S.me,s.data());recomputeCompany();onLive()}
-  },err=>{if(err.code!=='permission-denied')console.error('users/me',err)}))}
-  S.unsubs.push(DB.collection('settings').doc('config').onSnapshot(s=>{state.settings=s.exists?s.data():null;onLive()}));
-  S.unsubs.push(DB.collection('settings').doc('counters').onSnapshot(s=>{state.counters=s.exists?s.data():{};onLive()}));
-}
-const _subscribeAllOrig=window.subscribeAll;
-window.subscribeAll=function(me){
-  if(me&&me.role==='company'){subscribeCompany();return}
-  return _subscribeAllOrig?_subscribeAllOrig.apply(this,arguments):undefined;
-};
-
-/* ========== LAST PURCHASE PRICE ========== */
-function lastPurchasesOf(itemId,limit){
-  const rows=[];
-  PURCHASES().forEach(d=>LINES(d).forEach(l=>{
-    if(l.itemId===itemId)rows.push({pid:d.id,date:d.date||'',no:d.no||'',partyId:d.partyId||'',qty:+l.qty||0,rate:+l.rate||0,created:d.created||0});
-  }));
-  rows.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.created||0)-(a.created||0));
-  return rows.slice(0,limit||10);
-}
-function lastPurchaseInfo(itemId){
-  const r=lastPurchasesOf(itemId,1)[0];
-  return r?Object.assign(r,{partyName:(partyById(r.partyId)||{}).name||''}):null;
-}
-function lastPurchaseSub(itemId){
-  const p=lastPurchaseInfo(itemId);if(!p)return '';
-  return 'Last buy '+money(p.rate)+' · '+fmtDate(p.date)+(p.partyName?' · '+p.partyName:'');
-}
-function resolveItemFromPick(o,input){
-  if(o&&o.id&&itemById(o.id))return itemById(o.id);
-  const label=(o&&o.label!=null?o.label:input.value);
-  return ITEMS().find(x=>(x.name||'')===label)
-      || ITEMS().find(x=>(x.name||'').toLowerCase()===String(label||'').toLowerCase())||null;
-}
-function showLastRateHint(rowEl,itemId){
-  if(!rowEl)return;
-  let h=rowEl.querySelector('.lastRateHint');
-  const info=itemId?lastPurchaseInfo(itemId):null;
-  if(!info){if(h)h.remove();return}
-  if(!h){h=document.createElement('div');h.className='lastRateHint';
-    (rowEl.querySelector('.fl-item')||rowEl).appendChild(h)}
-  h.innerHTML='Last purchase: <b>'+esc(money(info.rate))+'</b> · '+esc(fmtDate(info.date))
-    +(info.partyName?' · '+esc(info.partyName):'')+(info.no?' · '+esc(info.no):'');
-}
-document.addEventListener('input',e=>{
-  const cell=e.target.closest&&e.target.closest('.fl-item');if(!cell)return;
-  const name=(e.target.value||'').trim().toLowerCase();
-  const it=ITEMS().find(x=>(x.name||'').toLowerCase()===name);
-  showLastRateHint(cell.closest('.fline')||cell,it?it.id:null);
-});
-const _attachComboOrig=window.attachCombo;
-window.attachCombo=function(input,opts){
-  const _pick=opts&&opts.onPick;
-  const wrapped=Object.assign({},opts,{onPick:o=>{
-    if(_pick)_pick(o);
-    doubleRaf(()=>{
-      const cell=input.closest&&input.closest('.fl-item');
-      const it=resolveItemFromPick(o,input);
-      if(cell)showLastRateHint(cell.closest('.fline')||cell,it?it.id:null);
-      if(it&&AUTO_LAST_RATE_ON_PURCHASE&&/purchases/.test(location.hash||'')){
-        const row=cell&&cell.closest('.fline');
-        const rInp=row&&row.querySelector('.fl-rate input');
-        const lp=lastPurchaseInfo(it.id);
-        if(rInp&&lp&&!(+rInp.value)){rInp.value=lp.rate;rInp.dispatchEvent(new Event('input',{bubbles:true}))}
-      }
-    });
-  }});
-  return _attachComboOrig(input,wrapped);
-};
-
-/* ========== ADD-A-ROW FOCUS ========== */
-function findAddRowBtn(){
-  return [...document.querySelectorAll('button,.chip,a.btn')].find(el=>{
-    const t=(el.textContent||'').trim();
-    const ids=el.id+' '+(el.className||'')+' '+(el.getAttribute('data-act')||'');
-    return (/add\s*(a\s*)?(row|line|item)/i.test(t)||/addline|addrow|lineadd|rowadd/i.test(ids))&&!el.disabled;
-  });
-}
-function focusLastLineInput(){
-  const rows=qsa('.fline');if(!rows.length)return;
-  const last=rows[rows.length-1];
-  const inp=last.querySelector('.fl-item input')||last.querySelector('input');
-  if(inp){inp.focus();if(inp.select)inp.select()}
-}
-document.addEventListener('click',e=>{
-  const b=e.target.closest&&e.target.closest('button,.chip');if(!b)return;
-  if(findAddRowBtn()===b)doubleRaf(focusLastLineInput);
-});
-document.addEventListener('keydown',e=>{
-  if(e.key!=='Tab'||e.shiftKey||e.ctrlKey||e.altKey)return;
-  const row=e.target.closest&&e.target.closest('.fline');if(!row)return;
-  const rows=qsa('.fline');if(row!==rows[rows.length-1])return;
-  const fields=[...row.querySelectorAll('input:not([disabled]):not([readonly]),select:not([disabled])')];
-  if(!fields.length||e.target!==fields[fields.length-1])return;
-  const btn=findAddRowBtn();if(!btn)return;
-  e.preventDefault();btn.click();doubleRaf(focusLastLineInput);
-});
-
-/* ========== JOURNAL VOUCHERS ========== */
-const JV=()=>state.journals||[];
-function vJournals(){
-  document.title='Journal Vouchers — Munshi';
-  setTop('Journal Vouchers');setActiveNav('journals');
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Journal Vouchers</div>
-    <div class="psub">Party-to-party settlements: tell a party who owes you to pay a party you owe.</div></div>
-    <button class="btn btn-primary btn-sm" id="jrAdd">+ New Journal</button></div>
-    <div class="card"><div class="list" id="jrList"></div></div>`;
-  $('#jrAdd').onclick=()=>jrForm();
-  renderJrList();
-}
-function renderJrList(){
-  const rows=JV().slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.created||0)-(a.created||0));
-  $('#jrList').innerHTML=rows.length?rows.map(j=>{
-    const dr=partyById(j.debitPartyId),cr=partyById(j.creditPartyId);
-    return `<div class="lrow" data-id="${j.id}">
-      <span class="avatar" style="background:var(--amber-soft);color:var(--amber)">JV</span>
-      <div class="lmain"><div class="lname">${esc(cr?cr.name:'?')} <span class="muted">→ paid →</span> ${esc(dr?dr.name:'?')}</div>
-      <div class="lsub"><span>${fmtDate(j.date)}</span><span>${esc(j.no||'')}</span>${j.note?`<span>${esc(j.note)}</span>`:''}</div></div>
-      <div class="lright"><div class="lamt">${esc(money(j.amount))}</div>
-      <button class="icon-btn" data-del="${j.id}" style="margin-top:4px" title="Delete">${UI_TRASH}</button></div></div>`}).join('')
-    :`<div class="empty"><div class="big">No journal vouchers yet</div>Create one when a party settles another party's dues on your behalf.</div>`;
-  qsa('#jrList .lrow').forEach(r=>r.onclick=e=>{if(e.target.closest('[data-del]'))return;jrForm(r.dataset.id)});
-  qsa('#jrList [data-del]').forEach(b=>b.onclick=()=>{
-    if(confirm('Delete this journal voucher? Both party ledgers will be restored.')){dbDel('journals',b.dataset.del);toast('Journal deleted')}});
-}
-function jrForm(id){
-  const j=id?JV().find(x=>x.id===id):null;
-  const ps=PARTIES().slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  const opt=v=>ps.map(p=>`<option value="${p.id}" ${v===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  uiModal(j?'Edit Journal Voucher':'New Journal Voucher',`
-    <div class="notice green" style="margin-top:0">Party A owes you, you owe Party B → record it once and <b>both ledgers adjust automatically</b>.</div>
-    <div class="field"><label class="fl">Party who will PAY (owes us)</label><select id="jrPayer" class="sel"><option value="">— select party —</option>${opt(j?j.creditPartyId:'')}</select></div>
-    <div class="field"><label class="fl">Party who will RECEIVE (we owe them)</label><select id="jrPayee" class="sel"><option value="">— select party —</option>${opt(j?j.debitPartyId:'')}</select></div>
-    <div class="frow">
-      <div class="field"><label class="fl">Amount *</label><input type="number" id="jrAmt" class="in" min="0" step="0.01" value="${j?+j.amount:''}" placeholder="0.00"></div>
-      <div class="field"><label class="fl">Date</label><input type="date" id="jrDate" class="in" value="${esc(j?j.date:todayISO())}"></div></div>
-    <div class="field"><label class="fl">Note</label><input id="jrNote" class="in" value="${esc(j?j.note||'':'')}" placeholder="e.g. Told Rahul Traders to settle Sony Bills directly"></div>`,
-    `<button class="btn btn-ghost" onclick="window.__uiClose()">Cancel</button><button class="btn btn-primary" id="jrSave">${j?'Save Changes':'Create Journal'}</button>`);
-  $('#jrSave').onclick=async()=>{
-    const payer=$('#jrPayer').value,payee=$('#jrPayee').value,amount=+$('#jrAmt').value,date=$('#jrDate').value||todayISO();
-    if(!payer||!payee)return toast('Select both parties','err');
-    if(payer===payee)return toast('Both parties cannot be the same','err');
-    if(!(amount>0))return toast('Enter a valid amount','err');
-    if(j){dbUpdate('journals',j.id,{creditPartyId:payer,debitPartyId:payee,amount,date,note:$('#jrNote').value.trim()});toast('Journal updated')}
-    else{const no=await nextNo('jv');dbAdd('journals',{no,date,creditPartyId:payer,debitPartyId:payee,amount,note:$('#jrNote').value.trim(),created:Date.now(),by:S.me&&S.me.id});toast('Journal '+no+' created')}
-    window.__uiClose();
-  };
-}
-
-/* ========== EXPENSES ========== */
-const EXP_MODES=['Cash','Bank','UPI','Card','Cheque','Other'];
-const HEADS=()=>state.expenseHeads||[],EXPENSES=()=>state.expenses||[];
-const headById=id=>HEADS().find(h=>h.id===id);
-function headOptionsHTML(selId){const hs=HEADS().slice().sort((a,b)=>a.name.localeCompare(b.name));
-  return hs.length?hs.map(h=>`<option value="${h.id}" ${selId===h.id?'selected':''}>${esc(h.name)}</option>`).join(''):'<option value="">— no heads yet —</option>'}
-function refreshHeadSelect(){const s=document.getElementById('exHead');if(!s)return;
-  const cur=s.value;s.innerHTML=headOptionsHTML(cur);if(cur)s.value=cur}
-function refreshHeadFilter(){const s=document.getElementById('expHeadF');if(!s)return;
-  const cur=s.value;
-  s.innerHTML='<option value="">All heads</option>'+HEADS().slice().sort((a,b)=>a.name.localeCompare(b.name))
-    .map(h=>`<option value="${h.id}" ${cur===h.id?'selected':''}>${esc(h.name)}</option>`).join('')}
-function vExpenses(){
-  document.title='Expenses — Munshi';
-  setTop('Expenses');setActiveNav('expenses');
-  const f=S.expFilter=S.expFilter||{month:todayISO().slice(0,7),headId:''};
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Expenses</div>
-    <div class="psub">Day-to-day expenses with your own heads.</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" id="expHeadsBtn">Manage Heads</button>
-      <button class="btn btn-primary btn-sm" id="expAddBtn">+ Add Expense</button></div></div>
-    <div class="kpis" id="expKpis"></div>
-    <div class="card"><div class="cardpad" style="border-bottom:1px solid var(--line)">
-      <div class="frow" style="margin:0">
-        <div class="field" style="margin:0"><label class="fl">Month</label><input type="month" id="expMonth" class="in" value="${esc(f.month)}"></div>
-        <div class="field" style="margin:0"><label class="fl">Head</label><select id="expHeadF" class="sel"><option value="">All heads</option>${HEADS().slice().sort((a,b)=>a.name.localeCompare(b.name)).map(h=>`<option value="${h.id}" ${f.headId===h.id?'selected':''}>${esc(h.name)}</option>`).join('')}</select></div></div></div>
-      <div class="list" id="expList"></div></div>`;
-  $('#expMonth').onchange=e=>{f.month=e.target.value;renderExpList()};
-  $('#expHeadF').onchange=e=>{f.headId=e.target.value;renderExpList()};
-  $('#expAddBtn').onclick=()=>expForm();
-  $('#expHeadsBtn').onclick=()=>expHeadsModal(()=>{refreshHeadFilter();renderExpList()});
-  renderExpList();
-}
-function renderExpList(){
-  const f=S.expFilter;
-  const rows=EXPENSES().filter(x=>(!f.month||String(x.date||'').startsWith(f.month))&&(!f.headId||x.headId===f.headId))
-    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.created||0)-(a.created||0));
-  const mAll=EXPENSES().filter(x=>String(x.date||'').startsWith(f.month));
-  const byHead=groupBy(mAll.filter(x=>!f.headId||x.headId===f.headId),x=>x.headId);
-  let top=null;Object.keys(byHead).forEach(k=>{const v=sum(byHead[k],x=>+x.amount||0);if(!top||v>top.v)top={name:(headById(k)||{}).name||'—',v}});
-  $('#expKpis').innerHTML=`
-    <div class="kpi"><div class="lbl">Month Total</div><div class="kpiV">${esc(money(sum(mAll,x=>+x.amount||0)))}</div><div class="kpiD">${mAll.length} entries</div></div>
-    <div class="kpi"><div class="lbl">Filtered Total</div><div class="kpiV">${esc(money(sum(rows,x=>+x.amount||0)))}</div><div class="kpiD">${rows.length} shown</div></div>
-    <div class="kpi"><div class="lbl">Top Head (month)</div><div class="kpiV" style="font-size:15px">${top?esc(top.name):'—'}</div><div class="kpiD">${top?esc(money(top.v)):''}</div></div>
-    <div class="kpi"><div class="lbl">All-time Total</div><div class="kpiV">${esc(money(sum(EXPENSES(),x=>+x.amount||0)))}</div><div class="kpiD">${EXPENSES().length} entries</div></div>`;
-  $('#expList').innerHTML=rows.length?rows.map(x=>{const h=headById(x.headId),tc=tileFor(h?h.name:'?');
-    return `<div class="lrow" data-id="${x.id}">
-      <span class="avatar" style="background:${tc[0]};color:${tc[1]}">${esc((h?h.name:'?')[0])}</span>
-      <div class="lmain"><div class="lname">${esc(h?h.name:'(head deleted)')}</div>
-      <div class="lsub"><span>${fmtDate(x.date)}</span><span>${esc(x.mode||'Cash')}</span>${x.no?`<span>${esc(x.no)}</span>`:''}${x.note?`<span>${esc(x.note)}</span>`:''}</div></div>
-      <div class="lright"><div class="lamt">${esc(money(x.amount))}</div>
-      <button class="icon-btn" data-del="${x.id}" style="margin-top:4px" title="Delete">${UI_TRASH}</button></div></div>`}).join('')
-    :`<div class="empty"><div class="big">No expenses yet</div>Tap “+ Add Expense”. Create heads like Tea, Petrol, Rent first.</div>`;
-  qsa('#expList .lrow').forEach(r=>r.onclick=e=>{if(e.target.closest('[data-del]'))return;expForm(r.dataset.id)});
-  qsa('#expList [data-del]').forEach(b=>b.onclick=()=>{
-    if(confirm('Delete this expense?')){dbDel('expenses',b.dataset.del);toast('Expense deleted')}});
-}
-function expForm(id){
-  const ex=id?EXPENSES().find(x=>x.id===id):null;
-  uiModal(ex?'Edit Expense':'Add Expense',`
-    <div class="field"><label class="fl">Date</label><input type="date" id="exDate" class="in" value="${esc(ex?ex.date:todayISO())}"></div>
-    <div class="field"><label class="fl">Expense Head *</label><select id="exHead" class="sel">${headOptionsHTML(ex?ex.headId:'')}</select>
-      <div class="subcat-note">Missing a head? <a href="#" id="exNewHead" style="color:var(--green);font-weight:600">Manage Heads</a></div></div>
-    <div class="frow">
-      <div class="field"><label class="fl">Amount *</label><input type="number" id="exAmt" class="in" min="0" step="0.01" value="${ex?+ex.amount:''}" placeholder="0.00"></div>
-      <div class="field"><label class="fl">Paid By</label><select id="exMode" class="sel">${EXP_MODES.map(m=>`<option ${ex&&ex.mode===m?'selected':''}>${m}</option>`).join('')}</select></div></div>
-    <div class="field"><label class="fl">Note</label><input id="exNote" class="in" value="${esc(ex?ex.note||'':'')}" placeholder="e.g. Tea & snacks for shop"></div>`,
-    `<button class="btn btn-ghost" onclick="window.__uiClose()">Cancel</button><button class="btn btn-primary" id="exSave">${ex?'Save Changes':'Add Expense'}</button>`);
-  $('#exNewHead').onclick=e=>{e.preventDefault();expHeadsModal(refreshHeadSelect)};
-  $('#exSave').onclick=async()=>{
-    const headId=$('#exHead').value,amount=+$('#exAmt').value,date=$('#exDate').value||todayISO();
-    if(!headId)return toast('Select or add an expense head first','err');
-    if(!(amount>0))return toast('Enter a valid amount','err');
-    if(ex){dbUpdate('expenses',ex.id,{date,headId,amount,mode:$('#exMode').value,note:$('#exNote').value.trim()});toast('Expense updated')}
-    else{const no=await nextNo('exp');dbAdd('expenses',{no,date,headId,amount,mode:$('#exMode').value,note:$('#exNote').value.trim(),created:Date.now(),by:S.me&&S.me.id});toast('Expense added')}
-    window.__uiClose();
-  };
-}
-function expHeadsModal(onChange){
-  uiModal('Expense Heads',`
-    <div class="field" style="display:flex;gap:8px;margin-bottom:12px"><input id="hdName" class="in" placeholder="New head, e.g. Tea, Petrol, Rent, Loading" style="flex:1"><button class="btn btn-primary" id="hdAdd">Add</button></div>
-    <div class="list" id="hdList" style="border:1px solid var(--line);border-radius:10px;max-height:50vh;overflow:auto"></div>`,null);
-  const render=()=>{
-    const host=$('#hdList');if(!host)return;
-    const hs=HEADS().slice().sort((a,b)=>a.name.localeCompare(b.name));
-    host.innerHTML=hs.length?hs.map(h=>{
-      const used=EXPENSES().filter(x=>x.headId===h.id);
-      return `<div class="lrow editmode"><div class="lmain"><div class="lname">${esc(h.name)}</div>
-        <div class="lsub"><span>${used.length} entries · ${esc(money(sum(used,x=>+x.amount||0)))}</span></div></div>
-        <button class="icon-btn" data-ren="${h.id}" title="Rename">${UI_PEN}</button>
-        <button class="icon-btn" data-delh="${h.id}" title="Delete">${UI_TRASH}</button></div>`}).join('')
-      :`<div class="empty" style="padding:20px">No heads yet — add your first head above.</div>`;
-    qsa('#hdList [data-ren]').forEach(b=>b.onclick=()=>{
-      const h=HEADS().find(x=>x.id===b.dataset.ren);const nn=prompt('Rename head',h.name);
-      if(nn&&nn.trim()&&nn.trim()!==h.name){
-        if(HEADS().some(x=>x.id!==h.id&&x.name.toLowerCase()===nn.trim().toLowerCase()))return toast('That head already exists','err');
-        dbUpdate('expenseHeads',h.id,{name:nn.trim()});toast('Head renamed');render();onChange&&onChange()}});
-    qsa('#hdList [data-delh]').forEach(b=>b.onclick=()=>{
-      const h=HEADS().find(x=>x.id===b.dataset.delh);
-      if(EXPENSES().some(x=>x.headId===h.id))return toast('Head has entries — rename it instead','err');
-      if(confirm('Delete head “'+h.name+'”?')){dbDel('expenseHeads',h.id);toast('Head deleted');render();onChange&&onChange()}});
-  };
-  render();
-  $('#hdAdd').onclick=()=>{
-    const nm=($('#hdName').value||'').trim();
-    if(!nm)return toast('Type a head name','err');
-    if(HEADS().some(h=>h.name.toLowerCase()===nm.toLowerCase()))return toast('That head already exists','err');
-    dbAdd('expenseHeads',{name:nm,created:Date.now()});$('#hdName').value='';toast('Head added');render();onChange&&onChange()};
-}
-
-/* ========== ITEM PURCHASE HISTORY ========== */
-const IH={itemId:'',label:'',limit:10,from:'',to:''};
-function vItemPurchaseHistory(){
-  document.title='Item Purchase History — Munshi';
-  setTop('Item Purchase History');setActiveNav('purchase-history');
-  const freq={};PURCHASES().forEach(d=>LINES(d).forEach(l=>{if(l.itemId)freq[l.itemId]=(freq[l.itemId]||0)+1}));
-  const quick=Object.keys(freq).map(id=>({id,n:freq[id],it:itemById(id)})).filter(x=>x.it).sort((a,b)=>b.n-a.n).slice(0,8);
-  V().innerHTML=`<div class="pagehead"><div><div class="ptitle">Item Purchase History</div>
-    <div class="psub">Last purchases of any item — default 10, extend with count & custom dates.</div></div></div>
-    <div class="card cardpad" style="margin-bottom:14px">
-      <div class="field" style="margin-bottom:10px"><label class="fl">Search Item</label>
-        <input id="ihItem" class="in" placeholder="Start typing item name…" autocomplete="off" value="${esc(IH.label)}"></div>
-      ${quick.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${quick.map(q=>`<button class="chip" data-qid="${q.id}">${esc(q.it.name)}</button>`).join('')}</div>`:''}
-      <div class="frow">
-        <div class="field" style="margin-bottom:0"><label class="fl">Show last how many (max 500)</label><input type="number" id="ihLimit" class="in" min="1" max="500" value="${IH.limit}"></div>
-        <div class="field" style="margin-bottom:0"><label class="fl">&nbsp;</label><button class="btn btn-ghost btn-sm" id="ihClear" style="width:100%">Clear date filter</button></div></div>
-      <div class="rdates"><input type="date" id="ihFrom" class="in" value="${IH.from}"><span class="muted">to</span><input type="date" id="ihTo" class="in" value="${IH.to}"></div></div>
-    <div class="kpis" id="ihKpis"></div>
-    <div class="card" id="ihResults"></div>`;
-  attachCombo($('#ihItem'),{getPool:()=>ITEMS().map(it=>({label:it.name,sub:lastPurchaseSub(it.id),id:it.id})),
-    onPick:o=>{const it=resolveItemFromPick(o,$('#ihItem'));IH.itemId=it?it.id:'';IH.label=o.label;renderIH()}});
-  qsa('[data-qid]').forEach(b=>b.onclick=()=>{const it=itemById(b.dataset.qid);IH.itemId=it.id;IH.label=it.name;$('#ihItem').value=it.name;renderIH()});
-  $('#ihLimit').onchange=e=>{IH.limit=Math.max(1,Math.min(500,+e.target.value||10));e.target.value=IH.limit;renderIH()};
-  $('#ihFrom').onchange=e=>{IH.from=e.target.value;renderIH()};
-  $('#ihTo').onchange=e=>{IH.to=e.target.value;renderIH()};
-  $('#ihClear').onclick=()=>{IH.from='';IH.to='';$('#ihFrom').value='';$('#ihTo').value='';renderIH()};
-  renderIH();
-}
-function renderIH(){
-  const host=$('#ihResults');if(!host)return;
-  if(!IH.itemId){$('#ihKpis').innerHTML='';host.innerHTML=`<div class="empty"><div class="big">Pick an item</div>Search above or tap a quick-pick chip to see its purchase trail.</div>`;return}
-  const it=itemById(IH.itemId);
-  const totalAvail=lastPurchasesOf(IH.itemId,9999).length;
-  let rows=lastPurchasesOf(IH.itemId,9999);
-  if(IH.from)rows=rows.filter(r=>r.date>=IH.from);
-  if(IH.to)rows=rows.filter(r=>r.date<=IH.to);
-  rows=rows.slice(0,IH.limit);
-  const qty=sum(rows,r=>r.qty),amt=sum(rows,r=>r.qty*r.rate),avg=qty>0?amt/qty:0,last=rows[0];
-  $('#ihKpis').innerHTML=`
-    <div class="kpi"><div class="lbl">Last Purchase Rate</div><div class="kpiV">${last?esc(money(last.rate)):'—'}</div><div class="kpiD">${last?fmtDate(last.date):''}</div></div>
-    <div class="kpi"><div class="lbl">Weighted Avg Rate</div><div class="kpiV">${esc(money(avg))}</div><div class="kpiD">shown rows</div></div>
-    <div class="kpi"><div class="lbl">Qty Purchased</div><div class="kpiV">${qty}</div><div class="kpiD">${esc((it&&it.unit)||'pcs')}</div></div>
-    <div class="kpi"><div class="lbl">Total Value</div><div class="kpiV">${esc(money(amt))}</div><div class="kpiD">${rows.length} of ${totalAvail} purchases</div></div>`;
-  host.innerHTML=rows.length?`<div class="list">`+rows.map((r,i)=>{const p=partyById(r.partyId);
-    return `<div class="lrow" data-pid="${r.pid}" title="Open purchase invoice">
-      <div class="lmain"><div class="lname">${esc(p?p.name:'— supplier —')}${i===0?' <span class="badge b-green">LATEST</span>':''}</div>
-      <div class="lsub"><span>${fmtDate(r.date)}</span><span>Inv ${esc(r.no||'—')}</span></div></div>
-      <div class="lright"><div class="lamt">${esc(money(r.rate))}</div>
-      <div class="lmeta">${r.qty} ${esc((it&&it.unit)||'pcs')} · ${esc(money(r.qty*r.rate))}</div></div></div>`}).join('')+`</div>`
-    :`<div class="empty"><div class="big">No purchases found</div>${(IH.from||IH.to)?'Try widening the date range.':'This item has never been purchased.'}</div>`;
-  qsa('#ihResults .lrow').forEach(r=>r.onclick=()=>{location.hash='#/purchases/view/'+r.dataset.pid});
-}
-
-/* ========== ROUTER + SIDEBAR + GUARD ========== */
-const UI_ROUTES={expenses:vExpenses,journals:vJournals,'purchase-history':vItemPurchaseHistory};
-const hashNow=()=>(location.hash||'').replace(/^#\/?/,'').split('?')[0];
-function allowed(h){
-  if(!h)return true;
-  if(/^(login|logout)/.test(h))return true;
-  return COMPANY_CFG.allowedRoutes.some(p=>h===p||h.indexOf(p+'/')===0);
-}
-function companyGuard(){
-  if(!isCompany())return false;
-  const h=hashNow();
-  if(h===''||h==='dash'){location.hash='#/'+COMPANY_CFG.homeRoute;return true}
-  if(!allowed(h)){location.hash='#/'+COMPANY_CFG.homeRoute;toast('Your login is limited to your brand','err');return true}
-  return false;
-}
-/* company users: serve docs/money views from brand-filtered state */
-function companyRoutes(h){
-  if(!isCompany())return false;
-  const s=h.split('/');
-  if(s[0]==='sales'){
-    if(s[1]==='view'&&s[2]){vDocView('sale',s[2]);return true}
-    if(s[1]==='edit'&&s[2]){vDocForm('sale',s[2]);return true}
-    if(!s[1]){vDocs('sale');return true}
-    return false}
-  if(s[0]==='purchases'){
-    if(s[1]==='view'&&s[2]){vDocView('purchase',s[2]);return true}
-    if(s[1]==='edit'&&s[2]){vDocForm('purchase',s[2]);return true}
-    if(!s[1]){vDocs('purchase');return true}
-    return false}
-  if(s[0]==='collections'){
-    if(s[1]==='new'){vMoneyForm('receipt',s[2]);return true}
-    if(s[1]==='edit'&&s[2]){vMoneyForm('receipt',null,s[2]);return true}
-    if(!s[1]){vMoneyList('receipt');return true}
-    return false}
-  return false;
-}
-function uiRoute(){
-  if(!S.me||RANK[S.me.role]<1)return false;
-  const h=hashNow();
-  if(UI_ROUTES[h]){UI_ROUTES[h]();markSide();return true}
-  return false;
-}
-function markSide(){
-  const root=hashNow().split('/')[0];
-  qsa('[data-uilink]').forEach(a=>a.classList.toggle('on',a.dataset.uilink===root));
-}
-function ensureSideLinks(){
-  const side=document.querySelector('.side');
-  /* Expense, journal and item-history tools are not part of company access. */
-  if(isCompany())return;
-  if(!side||!S.me||RANK[S.me.role]<1)return;
-  if(side.querySelector('[data-uilink]'))return;
-  const w=document.createElement('div');
-  w.innerHTML=`<div class="sgroup">Accounts & Tools</div>
-    <a class="slink" data-uilink="expenses" href="#/expenses">${UI_SVG.exp}<span>Expenses</span></a>
-    <a class="slink" data-uilink="journals" href="#/journals">${UI_SVG.jv}<span>Journal Vouchers</span></a>
-    <a class="slink" data-uilink="purchase-history" href="#/purchase-history">${UI_SVG.hist}<span>Item Purchase History</span></a>`;
-  const foot=side.querySelector('.sfoot');
-  if(foot)side.insertBefore(w,foot);else side.appendChild(w);
-  markSide();
-}
-function hideBlockedNav(){
-  if(!isCompany())return;
-  qsa('a[href^="#/"]').forEach(el=>{
-    const h=(el.getAttribute('href')||'').replace(/^#\/?/,'').split('?')[0];
-    if(!allowed(h))el.style.display='none';
-  });
-}
-let _navT=null;
-function scheduleNavFix(){if(_navT)return;_navT=setTimeout(()=>{_navT=null;
-  try{ensureSideLinks()}catch(e){} try{hideBlockedNav()}catch(e){}},120)}
-new MutationObserver(scheduleNavFix).observe(document.body,{childList:true,subtree:true});
-try{ensureSideLinks();hideBlockedNav()}catch(e){}
-
-/* ---- THE CRITICAL FIX: re-bind hashchange to the wrapped router ----
-   The original script registered `addEventListener('hashchange', route)`
-   with the ORIGINAL function object. Overriding window.route later does
-   not rebind it — so we remove that listener and attach our own. */
-const _routeOrig=window.route;
-if(_routeOrig)window.removeEventListener('hashchange',_routeOrig);
-window.route=function(){
-  try{if(companyGuard())return}catch(e){}
-  try{if(uiRoute())return}catch(e){}
-  try{if(companyRoutes(hashNow()))return}catch(e){}
-  return _routeOrig?_routeOrig.apply(this,arguments):undefined;
-};
-window.addEventListener('hashchange',function(){window.route()});
-
-}catch(err){console.error('Munshi upgrade layer failed:',err)}
 })();
 </script>
 </body>
