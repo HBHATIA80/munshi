@@ -312,11 +312,7 @@ body.locked{overflow:hidden}
 .ptot .g{border-top:2px solid #111;font-weight:700;font-size:15px}
 .pwords{margin-top:14px;font-size:12.5px;border:1px dashed #999;padding:9px 11px;border-radius:6px}
 
-/* Desktop keyboard shortcut hints */
-.keyhint{margin-left:auto;padding:2px 5px;border:1px solid rgba(120,130,120,.28);border-radius:5px;font:600 10px var(--mono);line-height:1.4;color:var(--ink2);background:rgba(255,255,255,.55);white-space:nowrap}
-.slink{display:flex;align-items:center;gap:9px}
-.slink:focus-visible{outline:2px solid var(--green);outline-offset:2px}
-@media(max-width:760px){.keyhint{display:none}}
+.combo-it.active{background:var(--soft, #eef4f0);outline:2px solid var(--line, #cbd8d0);outline-offset:-2px}
 </style>
 </head>
 <body>
@@ -370,25 +366,31 @@ const TILE=[['#E3EFE7','#0C6B4A'],['#F6E7E2','#B23B2A'],['#F5EBD4','#A9720E'],['
 const tileFor=s=>TILE[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%TILE.length];
 
 function attachCombo(input,opts){
- let box=null;
- const close=()=>{if(box){box.remove();box=null}};
+ let box=null,pool=[],activeIndex=-1;
+ const choose=i=>{const o=pool[i];if(!o)return;input.value=o.label;close();opts.onPick&&opts.onPick(o)};
+ const close=()=>{if(box){box.remove();box=null}pool=[];activeIndex=-1;input.removeAttribute('aria-activedescendant');input.setAttribute('aria-expanded','false')};
+ const paintActive=()=>{if(!box)return;box.querySelectorAll('.combo-it').forEach((el,i)=>{el.classList.toggle('active',i===activeIndex);el.setAttribute('aria-selected',i===activeIndex?'true':'false')});const el=box.querySelector(`.combo-it[data-i="${activeIndex}"]`);if(el){input.setAttribute('aria-activedescendant',el.id);el.scrollIntoView({block:'nearest'})}else input.removeAttribute('aria-activedescendant')};
  const insert=()=>{const p=input.parentElement;if(!p)return;if(getComputedStyle(p).position==='static')p.style.position='relative';p.appendChild(box)};
  const open=()=>{
   const q=(input.value||'').trim().toLowerCase();
-  const pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
-  close();
-  if(!pool.length){
-   if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}
-   return}
-  box=document.createElement('div');box.className='combo';
-  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
-  insert();
-  box.querySelectorAll('.combo-it').forEach(el=>{
-   el.addEventListener('pointerdown',e=>{e.preventDefault();const o=pool[+el.dataset.i];input.value=o.label;close();opts.onPick&&opts.onPick(o)})});
+  pool=opts.getPool().filter(o=>!q||String(o.label).toLowerCase().includes(q)||String(o.sub||'').toLowerCase().includes(q)).slice(0,10);
+  if(box){box.remove();box=null}activeIndex=-1;
+  if(!pool.length){input.setAttribute('aria-expanded','false');if(q){box=document.createElement('div');box.className='combo';box.innerHTML='<div class="combo-empty">No match found</div>';insert()}return}
+  box=document.createElement('div');box.className='combo';box.setAttribute('role','listbox');
+  box.innerHTML=pool.map((o,i)=>`<div class="combo-it" id="combo-opt-${Math.random().toString(36).slice(2)}-${i}" role="option" aria-selected="false" data-i="${i}"><b>${esc(o.label)}</b><span>${esc(o.sub||'')}</span></div>`).join('');
+  insert();input.setAttribute('aria-expanded','true');
+  box.querySelectorAll('.combo-it').forEach(el=>el.addEventListener('pointerdown',e=>{e.preventDefault();choose(+el.dataset.i)}));
  };
- input.addEventListener('input',open);
- input.addEventListener('focus',open);
- input.addEventListener('blur',()=>setTimeout(close,160));
+ input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');
+ input.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+   if(!box)open();if(pool.length){e.preventDefault();activeIndex=e.key==='ArrowDown'?(activeIndex+1)%pool.length:(activeIndex<=0?pool.length-1:activeIndex-1);paintActive()}return;
+  }
+  if(e.key==='Enter'&&box&&activeIndex>=0){e.preventDefault();choose(activeIndex);return}
+  if(e.key==='Tab'&&box&&activeIndex>=0){choose(activeIndex);return}
+  if(e.key==='Escape'&&box){e.preventDefault();close();return}
+ });
+ input.addEventListener('input',open);input.addEventListener('focus',open);input.addEventListener('blur',()=>setTimeout(close,160));
 }
 
 function showFatal(msg){try{const html=`<div class="card cardpad" style="border-color:#E7C9C0"><div class="notice red" style="margin:0"><div><b>This page failed to render.</b><br><span class="mono" style="font-size:12px;word-break:break-all">${esc(String(msg||'unknown error'))}</span><br><span style="font-size:12px">Screenshot this box and share it — it names the exact cause.</span></div></div></div>`;
@@ -805,9 +807,8 @@ function openSelfPwModal(){const cu=auth&&auth.currentUser;if(!cu)return;openMod
 function renderShell(){
  const u=S.me,s=SET(),ini=u.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),isCust=u.role==='customer';
  const nav=isCust?[{g:'',items:CNAV}]:navItems(u);
- const shortcutMap={'dash':'Alt+D','sales':'Alt+S','purchases':'Alt+P','sale-returns':'Alt+R','purchase-returns':'Alt+U','collections':'Alt+C','payments':'Alt+Y','parties':'Alt+A','items':'Alt+I','orders':'Alt+O'};
- const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="display:none">0</span>`:'';const k=shortcutMap[it[0]]?`<kbd class="keyhint">${shortcutMap[it[0]]}</kbd>`:'';
-  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}" title="${it[1]}${shortcutMap[it[0]]?' · '+shortcutMap[it[0]]:''}">${ic(it[2],17)}<span>${it[1]}</span>${k}${b}</a>`};
+ const linkHtml=it=>{const b=it[0]==='orders'?`<span class="nbadge" data-ordbadge style="margin-left:auto;display:none">0</span>`:it[0]==='cart'?`<span class="nbadge" data-cartbadge style="margin-left:auto;display:none">0</span>`:'';
+  return `<a class="slink" data-nav="${it[0]}" href="#/${it[0]}">${ic(it[2],17)}${it[1]}${b}</a>`};
  $('#app').innerHTML=`
  <aside class="side">
    <div class="sbrand"><div class="mark">M</div><div><b>${esc(s.businessName)}</b><span>Munshi ${APP_VERSION} · Live</span></div></div>
@@ -2325,24 +2326,6 @@ function route(){
  if(a==='settings'){if(!can.settings(u)){toast('Admin only','err');return vDash()}return vSettings()}
  go('dash');
  }catch(e){console.error(e);showFatal(e.message)}}
-// Desktop keyboard shortcuts: Alt+letter opens common sections (two keys only). Arrow keys move through
-// sidebar links when a sidebar link has focus; inputs retain normal arrow behavior.
-window.addEventListener('keydown',function(e){
- const target=e.target,tag=(target&&target.tagName||'').toLowerCase();
- const typing=tag==='input'||tag==='textarea'||tag==='select'||(target&&target.isContentEditable);
- if(e.altKey&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!typing){
-  const map={'d':'dash','s':'sales','p':'purchases','r':'sale-returns','u':'purchase-returns','c':'collections','y':'payments','a':'parties','i':'items','o':'orders'};
-  const dest=map[(e.key||'').toLowerCase()];if(dest&&S.me&&S.me.role!=='customer'&&S.me.role!=='company'){
-   e.preventDefault();go(dest);return;
-  }
- }
- if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!typing){
-  const nav=document.getElementById('sideNav');if(!nav)return;
-  const links=Array.from(nav.querySelectorAll('a.slink'));if(!links.length)return;
-  const idx=links.indexOf(document.activeElement);
-  if(idx>=0){e.preventDefault();links[Math.max(0,Math.min(links.length-1,idx+(e.key==='ArrowDown'?1:-1)))].focus();}
- }
-});
 window.addEventListener('hashchange',route);
 window.closeModal=closeModal;
 (function boot(){
